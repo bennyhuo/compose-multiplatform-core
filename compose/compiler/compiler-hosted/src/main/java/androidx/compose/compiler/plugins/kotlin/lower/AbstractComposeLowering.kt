@@ -32,6 +32,7 @@ import androidx.compose.compiler.plugins.kotlin.analysis.knownUnstable
 import androidx.compose.compiler.plugins.kotlin.irTrace
 import com.intellij.openapi.progress.ProcessCanceledException
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
+import org.jetbrains.kotlin.backend.common.lower.DeclarationIrBuilder
 import org.jetbrains.kotlin.backend.jvm.ir.isInlineClassType
 import org.jetbrains.kotlin.builtins.PrimitiveType
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
@@ -51,6 +52,7 @@ import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
 import org.jetbrains.kotlin.ir.declarations.IrField
 import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.declarations.IrFunction
+import org.jetbrains.kotlin.ir.declarations.IrPackageFragment
 import org.jetbrains.kotlin.ir.declarations.IrProperty
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.declarations.IrTypeParameter
@@ -124,10 +126,12 @@ import org.jetbrains.kotlin.ir.types.makeNullable
 import org.jetbrains.kotlin.ir.types.typeWith
 import org.jetbrains.kotlin.ir.util.DeepCopySymbolRemapper
 import org.jetbrains.kotlin.ir.util.SYNTHETIC_OFFSET
+import org.jetbrains.kotlin.ir.util.addChild
 import org.jetbrains.kotlin.ir.util.defaultType
 import org.jetbrains.kotlin.ir.util.fqNameForIrSerialization
 import org.jetbrains.kotlin.ir.util.functions
 import org.jetbrains.kotlin.ir.util.getArgumentsWithIr
+import org.jetbrains.kotlin.ir.util.getPackageFragment
 import org.jetbrains.kotlin.ir.util.getPropertyGetter
 import org.jetbrains.kotlin.ir.util.hasAnnotation
 import org.jetbrains.kotlin.ir.util.isFunction
@@ -155,6 +159,15 @@ abstract class AbstractComposeLowering(
     val metrics: ModuleMetrics,
     val stabilityInferencer: StabilityInferencer
 ) : IrElementTransformerVoid(), ModuleLoweringPass {
+
+    companion object {
+        var isJvmTarget: Boolean = false
+    }
+
+    init {
+        isJvmTarget = context.platform?.isJvm() ?: false
+    }
+
     protected val builtIns = context.irBuiltIns
 
     private val _composerIrClass =
@@ -368,7 +381,18 @@ abstract class AbstractComposeLowering(
 
         is Stability.Parameter -> resolve(parameter)
         is Stability.Runtime -> {
-            val stableField = makeStabilityField().also { it.parent = declaration }
+            val customStabilityFieldName = when {
+                context.platform?.isJvm() == false -> declaration.uniqueStabilityFieldName()
+                else -> null
+            }
+
+            val stableField = makeStabilityField(customStabilityFieldName).also { it.parent = declaration }
+            if (context.platform?.isJvm() == false) {
+                val root = declaration.getPackageFragment()
+                stableField.parent = root
+                val stabilityProp = makeStabilityProp(declaration.uniqueStabilityPropertyName(), stableField, root)
+                root.addChild(stabilityProp)
+            }
             IrGetFieldImpl(
                 UNDEFINED_OFFSET,
                 UNDEFINED_OFFSET,
@@ -878,24 +902,41 @@ abstract class AbstractComposeLowering(
         )
     }
 
-    fun makeStabilityField(): IrField {
+    fun IrClass.uniqueStabilityFieldName(): Name = Name.identifier(
+        kotlinFqName.asString().replace(".", "_") + KtxNameConventions.STABILITY_FLAG
+    )
+
+    fun IrClass.uniqueStabilityPropertyName(): Name = Name.identifier(
+        kotlinFqName.asString().replace(".", "_") + KtxNameConventions.STABILITY_PROP_FLAG
+    )
+
+    fun makeStabilityField(fieldName: Name? = null): IrField {
         return context.irFactory.buildField {
             startOffset = SYNTHETIC_OFFSET
             endOffset = SYNTHETIC_OFFSET
-            name = KtxNameConventions.STABILITY_FLAG
-            isStatic = context.platform.isJvm()
+            name = fieldName ?: KtxNameConventions.STABILITY_FLAG
+            isStatic = true
             isFinal = true
             type = context.irBuiltIns.intType
             visibility = DescriptorVisibilities.PUBLIC
         }
     }
 
-    protected fun makeStabilityProp(): IrProperty {
+    protected fun makeStabilityProp(
+        propertyName: Name? = null,
+        backingField: IrField,
+        parent: IrPackageFragment
+    ): IrProperty {
         return context.irFactory.buildProperty {
             startOffset = SYNTHETIC_OFFSET
             endOffset = SYNTHETIC_OFFSET
-            name = KtxNameConventions.STABILITY_PROP_FLAG
-            visibility = DescriptorVisibilities.PRIVATE
+            name = propertyName ?: KtxNameConventions.STABILITY_PROP_FLAG
+            visibility = DescriptorVisibilities.PUBLIC
+            isConst = true
+        }.also { property ->
+            backingField.correspondingPropertySymbol = property.symbol
+            property.backingField = backingField
+            property.parent = parent
         }
     }
 
