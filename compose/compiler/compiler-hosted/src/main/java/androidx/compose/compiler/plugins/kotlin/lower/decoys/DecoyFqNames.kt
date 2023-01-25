@@ -40,4 +40,5 @@ object DecoyFqNames {
 
     val CurrentComposerIntrinsic = ComposeFqNames.fqNameFor("\$get-currentComposer\$\$composable")
     val key = ComposeFqNames.fqNameFor("key\$composable")
+    val remember = ComposeFqNames.fqNameFor("remember\$composable")
 }

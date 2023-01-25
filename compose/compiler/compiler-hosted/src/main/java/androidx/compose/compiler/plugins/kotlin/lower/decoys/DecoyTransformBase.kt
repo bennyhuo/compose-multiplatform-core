@@ -28,6 +28,7 @@ import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
 import org.jetbrains.kotlin.ir.declarations.IrDeclaration
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationContainer
 import org.jetbrains.kotlin.ir.declarations.IrFunction
+import org.jetbrains.kotlin.ir.declarations.lazy.IrLazyFunctionBase
 import org.jetbrains.kotlin.ir.expressions.IrConst
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.IrVararg
@@ -57,10 +58,12 @@ internal interface DecoyTransformBase {
     val signatureBuilder: IdSignatureSerializer
 
     fun IrFunction.getSignatureId(): Long {
-        val signature = symbol.signature
-            ?: signatureBuilder.composeSignatureForDeclaration(this, false)
-
-        return signature.getSignatureId()
+        return if (this is IrLazyFunctionBase) {
+            symbol.signature ?: signatureBuilder.composeSignatureForDeclaration(this, false)
+        } else {
+            // types may have been remapped, so `symbol.signature` is outdated.
+            signatureBuilder.composeSignatureForDeclaration(this, false)
+        }.getSignatureId()
     }
 
     private fun IdSignature.getSignatureId(): Long {

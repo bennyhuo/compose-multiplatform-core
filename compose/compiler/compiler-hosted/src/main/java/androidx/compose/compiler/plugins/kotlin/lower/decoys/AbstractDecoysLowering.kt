@@ -21,8 +21,13 @@ import androidx.compose.compiler.plugins.kotlin.ModuleMetrics
 import androidx.compose.compiler.plugins.kotlin.analysis.StabilityInferencer
 import androidx.compose.compiler.plugins.kotlin.lower.AbstractComposeLowering
 import androidx.compose.compiler.plugins.kotlin.lower.includeFileNameInExceptionTrace
+import androidx.compose.compiler.plugins.kotlin.lower.isSyntheticComposableFunction
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
+import org.jetbrains.kotlin.backend.common.ir.isExpect
 import org.jetbrains.kotlin.backend.common.serialization.signature.IdSignatureSerializer
+import org.jetbrains.kotlin.backend.jvm.ir.propertyIfAccessor
+import org.jetbrains.kotlin.descriptors.Modality
+import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrConstructor
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
 import org.jetbrains.kotlin.ir.declarations.IrFile
@@ -33,8 +38,11 @@ import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.util.DeepCopySymbolRemapper
 import org.jetbrains.kotlin.ir.util.hasAnnotation
 import org.jetbrains.kotlin.ir.util.isEnumClass
+import org.jetbrains.kotlin.ir.util.isInterface
 import org.jetbrains.kotlin.ir.util.isLocal
 import org.jetbrains.kotlin.ir.util.parentAsClass
+import org.jetbrains.kotlin.ir.util.parentClassOrNull
+import org.jetbrains.kotlin.ir.util.defaultType
 
 abstract class AbstractDecoysLowering(
     pluginContext: IrPluginContext,
@@ -62,10 +70,25 @@ abstract class AbstractDecoysLowering(
         }
     }
 
-    protected fun IrFunction.shouldBeRemapped(): Boolean =
-        !isLocalFunction() &&
+    private fun IrFunction.isSAM(): Boolean {
+        return (parent as? IrClass).let {
+            it?.isInterface == true &&
+                it.isFun &&
+                (this as? IrSimpleFunction)?.modality == Modality.ABSTRACT
+        } || (this as? IrSimpleFunction)?.overriddenSymbols?.any {
+            it.owner.isSAM()
+        } == true
+    }
+
+    protected fun IrFunction.shouldBeRemapped(): Boolean {
+        return !isLocalFunction() &&
             !isEnumConstructor() &&
-            (hasComposableAnnotation() || hasComposableParameter())
+            (hasComposableAnnotation() || hasComposableParameter()) &&
+            !isSAM() &&
+            !(parentClassOrNull?.defaultType?.isSyntheticComposableFunction() ?: false) &&
+            !isExpect && !propertyIfAccessor.isExpect
+
+    }
 
     private fun IrFunction.isLocalFunction(): Boolean =
         origin == IrDeclarationOrigin.LOCAL_FUNCTION_FOR_LAMBDA ||

@@ -210,6 +210,7 @@ internal class DeepCopyIrTreeWithRemappedComposableTypes(
     }
 
     private fun IrFunction.needsComposableRemapping(): Boolean {
+        if (this.isDecoy()) return false // to preserve the original signature for decoys
         if (
             needsComposableRemapping(dispatchReceiverParameter?.type) ||
             needsComposableRemapping(extensionReceiverParameter?.type) ||
