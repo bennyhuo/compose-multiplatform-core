@@ -237,7 +237,7 @@ class SubstituteDecoyCallsTransformer(
     }
 
     private val addComposerParameterInplace = object : IrElementTransformerVoid() {
-        private val сomposerParamTransformer = ComposerParamTransformer(
+        private val composerParamTransformer = ComposerParamTransformer(
             context, symbolRemapper, stabilityInferencer, true, metrics
         )
         override fun visitSimpleFunction(declaration: IrSimpleFunction): IrStatement {
