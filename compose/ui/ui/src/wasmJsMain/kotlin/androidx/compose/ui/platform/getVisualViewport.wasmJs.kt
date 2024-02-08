@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
-package androidx.compose.foundation.text
+package androidx.compose.ui.platform
 
-internal actual val isInTouchMode = true
+@JsFun("""
+    () => window.visualViewport
+""")
+internal actual external fun getVisualViewport(): VisualViewport?

@@ -22,6 +22,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asComposeCanvas
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.toCompose
@@ -73,6 +74,9 @@ internal class ComposeLayer(
                 onPointerEventWithMultitouch(event)
             } else {
                 // macos and desktop`s web don't work properly when using onPointerEventWithMultitouch
+                if (scene.platformContext.inputModeManager.inputMode != InputMode.Keyboard) {
+                    scene.platformContext.inputModeManager.requestInputMode(InputMode.Keyboard)
+                }
                 onPointerEventNoMultitouch(event)
             }
         }

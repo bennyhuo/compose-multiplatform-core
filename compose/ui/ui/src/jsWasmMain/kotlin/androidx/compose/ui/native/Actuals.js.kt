@@ -15,4 +15,4 @@
  */
 package androidx.compose.ui.native
 
-internal actual val supportsMultitouch: Boolean get() = false
+internal actual val supportsMultitouch: Boolean get() = true
