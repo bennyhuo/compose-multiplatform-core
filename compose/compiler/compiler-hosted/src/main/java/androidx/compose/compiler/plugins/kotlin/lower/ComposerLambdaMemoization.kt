@@ -99,6 +99,7 @@ import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.platform.isJs
 import org.jetbrains.kotlin.platform.isWasm
 import org.jetbrains.kotlin.platform.jvm.isJvm
+import org.jetbrains.kotlin.platform.konan.isNative
 
 private class CaptureCollector {
     val captures = mutableSetOf<IrValueDeclaration>()
@@ -869,24 +870,23 @@ class ComposerLambdaMemoization(
         val function = expression.function
         val argumentCount = function.valueParameters.size
 
-        val isJsOrWasm = context.platform.isJs() || context.platform.isWasm()
-        if (argumentCount > MAX_RESTART_ARGUMENT_COUNT && isJsOrWasm) {
+        val isJsOrWasmOrNative = context.platform.isJs() || context.platform.isWasm() || context.platform.isNative()
+        if (argumentCount > MAX_RESTART_ARGUMENT_COUNT && isJsOrWasmOrNative) {
             error(
                 "only $MAX_RESTART_ARGUMENT_COUNT parameters " +
-                    "in @Composable lambda are supported on K/JS or K/Wasm"
+                    "in @Composable lambda are supported on K/JS or K/Wasm or K/Native"
             )
         }
 
         val useComposableLambdaN = argumentCount > MAX_RESTART_ARGUMENT_COUNT
         val useComposableFactory = collector.hasCaptures && declarationContext.composable
-        val rememberComposableN = rememberComposableLambdaNFunction ?: composableLambdaNFunction
         val rememberComposable = rememberComposableLambdaFunction ?: composableLambdaFunction
         val requiresExplicitComposerParameter = useComposableFactory &&
             rememberComposableLambdaFunction == null
         val restartFactorySymbol =
             if (useComposableFactory)
                 if (useComposableLambdaN)
-                    rememberComposableN
+                    rememberComposableLambdaNFunction ?: composableLambdaNFunction
                 else rememberComposable
             else if (useComposableLambdaN)
                 composableLambdaInstanceNFunction
