@@ -21,10 +21,9 @@
  * Please use that script when creating a new project, rather than copying an existing project and
  * modifying its settings.
  */
+
+import androidx.build.AndroidXComposePlugin
 import androidx.build.LibraryType
-import androidx.build.Publish
-import androidx.build.PlatformIdentifier
-import androidx.build.RunApiTasks
 
 plugins {
     id("AndroidXPlugin")
@@ -32,32 +31,24 @@ plugins {
     id("AndroidXComposePlugin")
 }
 
-androidXMultiplatform {
+AndroidXComposePlugin.applyAndConfigureKotlinPlugin(project)
+
+androidXComposeMultiplatform {
     android()
     desktop()
+    darwin()
+}
 
-    defaultPlatform(PlatformIdentifier.ANDROID)
-
+kotlin {
     sourceSets {
         commonMain {
             dependencies {
-                api projectOrArtifact(":lifecycle:lifecycle-runtime-ktx")
+                api projectOrArtifact(":lifecycle:lifecycle-runtime")
                 api("androidx.annotation:annotation-experimental:1.4.0")
-                api("androidx.compose.runtime:runtime:1.0.1")
-                api("androidx.compose.ui:ui:1.0.1")
+                api(project(":compose:runtime:runtime"))
+                api(project(":compose:ui:ui"))
 
                 implementation(libs.kotlinStdlib)
-            }
-        }
-        androidInstrumentedTest {
-            dependencies {
-                implementation(projectOrArtifact(":lifecycle:lifecycle-runtime-testing"))
-                implementation projectOrArtifact(":compose:ui:ui-test-junit4")
-                implementation project(":compose:test-utils")
-                implementation(libs.testRules)
-                implementation(libs.testRunner)
-                implementation(libs.junit)
-                implementation(libs.truth)
             }
         }
     }
@@ -65,11 +56,10 @@ androidXMultiplatform {
 
 androidx {
     name = "Lifecycle Runtime Compose"
-    type = LibraryType.PUBLISHED_KOTLIN_ONLY_LIBRARY
+    type = LibraryType.PUBLISHED_LIBRARY
     inceptionYear = "2021"
     description = "Compose integration with Lifecycle"
     metalavaK2UastEnabled = true
-    samples(projectOrArtifact(":lifecycle:lifecycle-runtime-compose:lifecycle-runtime-compose-samples"))
 }
 
 android {

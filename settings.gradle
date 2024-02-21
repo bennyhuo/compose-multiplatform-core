@@ -234,6 +234,7 @@ includeProject(":lint-checks:integration-tests")
 
 includeProject(":lifecycle:lifecycle-common")
 includeProject(":lifecycle:lifecycle-runtime")
+includeProject(":lifecycle:lifecycle-runtime-compose")
 includeProject(":lifecycle:lifecycle-runtime-lint")
 
 includeProject(":internal-testutils-common", "testutils/testutils-common",)
