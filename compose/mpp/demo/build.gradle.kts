@@ -161,6 +161,9 @@ kotlin {
                 implementation(project(":compose:ui:ui"))
                 implementation(project(":compose:ui:ui-graphics"))
                 implementation(project(":compose:ui:ui-text"))
+                implementation(project(":lifecycle:lifecycle-common"))
+                implementation(project(":lifecycle:lifecycle-runtime"))
+                implementation(project(":lifecycle:lifecycle-runtime-compose"))
                 implementation(libs.kotlinStdlib)
                 implementation(libs.kotlinCoroutinesCore)
                 api(libs.kotlinSerializationCore)
@@ -177,6 +180,7 @@ kotlin {
         val desktopMain by getting {
             dependsOn(skikoMain)
             dependencies {
+                implementation(libs.kotlinCoroutinesSwing)
                 implementation(libs.skikoCurrentOs)
                 implementation(project(":compose:desktop:desktop"))
             }
