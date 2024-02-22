@@ -19,6 +19,7 @@ import androidx.build.LibraryType
 import androidx.build.PlatformIdentifier
 import androidx.build.Publish
 import androidx.build.RunApiTasks
+import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
 
 plugins {
     id("AndroidXPlugin")
@@ -26,6 +27,8 @@ plugins {
 
 def macEnabled = KmpPlatformsKt.enableMac(project)
 def linuxEnabled = KmpPlatformsKt.enableLinux(project)
+def jsEnabled = KmpPlatformsKt.enableJs(project)
+def wasmEnabled = KmpPlatformsKt.enableWasm(project)
 
 androidXMultiplatform {
     jvm {}
@@ -34,6 +37,13 @@ androidXMultiplatform {
     ios()
 
     defaultPlatform(PlatformIdentifier.JVM)
+}
+
+kotlin {
+    js {
+        browser()
+    }
+    wasmJs()
 
     sourceSets {
         commonMain {
@@ -66,16 +76,16 @@ androidXMultiplatform {
             }
         }
 
-        if (macEnabled || linuxEnabled) {
-            nativeMain {
+        if (macEnabled || linuxEnabled || jsEnabled || wasmEnabled) {
+            nonJvmMain {
                 dependsOn(commonMain)
             }
         }
 
         targets.all { target ->
-            if (target.platformType == org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType.native) {
+            if (target.platformType !in [KotlinPlatformType.jvm, KotlinPlatformType.common]) {
                 target.compilations["main"].defaultSourceSet {
-                    dependsOn(nativeMain)
+                    dependsOn(nonJvmMain)
                 }
             }
         }
