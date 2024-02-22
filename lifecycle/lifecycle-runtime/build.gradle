@@ -6,16 +6,22 @@
  * modifying its settings.
  */
 
+import androidx.build.KmpPlatformsKt
 import androidx.build.PlatformIdentifier
 import androidx.build.Publish
 import org.jetbrains.kotlin.gradle.dsl.ExplicitApiMode
 import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
-import org.jetbrains.kotlin.konan.target.Family
 
 plugins {
     id("AndroidXPlugin")
     id("com.android.library")
 }
+
+def macEnabled = KmpPlatformsKt.enableMac(project)
+def linuxEnabled = KmpPlatformsKt.enableLinux(project)
+def jsEnabled = KmpPlatformsKt.enableJs(project)
+def wasmEnabled = KmpPlatformsKt.enableWasm(project)
+
 androidXMultiplatform {
     android()
     desktop()
@@ -23,11 +29,16 @@ androidXMultiplatform {
     linux()
     ios()
 
-    kotlin {
-        explicitApi = ExplicitApiMode.Strict
-    }
-
     defaultPlatform(PlatformIdentifier.ANDROID)
+}
+
+kotlin {
+    js {
+        browser()
+    }
+    wasmJs()
+
+    explicitApi = ExplicitApiMode.Strict
 
     sourceSets {
         commonMain {
@@ -86,40 +97,45 @@ androidXMultiplatform {
             }
         }
 
-        nativeMain {
-            dependsOn(commonMain)
-
-            // Required for WeakReference usage
-            languageSettings.optIn("kotlin.experimental.ExperimentalNativeApi")
+        if (macEnabled || linuxEnabled || jsEnabled || wasmEnabled) {
+            nonJvmMain {
+                dependsOn(commonMain)
+            }
         }
 
-        nativeTest {
-            dependsOn(commonTest)
-        }
-        darwinMain {
-            dependsOn(nativeMain)
+        if (macEnabled || linuxEnable) {
+            nativeMain {
+                dependsOn(nonJvmMain)
 
-            // Required for WeakReference usage
-            languageSettings.optIn("kotlin.experimental.ExperimentalNativeApi")
-        }
-        linuxMain {
-            dependsOn(nativeMain)
+                // Required for WeakReference usage
+                languageSettings.optIn("kotlin.experimental.ExperimentalNativeApi")
+            }
 
-            // Required for WeakReference usage
-            languageSettings.optIn("kotlin.experimental.ExperimentalNativeApi")
+            nativeTest {
+                dependsOn(commonTest)
+            }
+        }
+
+        if (jsEnabled || wasmEnabled) {
+            webMain {
+                dependsOn(nonJvmMain)
+            }
+        }
+        if (jsEnabled) {
+            jsMain {
+                dependsOn(webMain)
+            }
+        }
+        if (wasmEnabled) {
+            wasmJsMain {
+                dependsOn(webMain)
+            }
         }
 
         targets.all { target ->
             if (target.platformType == KotlinPlatformType.native) {
                 target.compilations["main"].defaultSourceSet {
-                    def konanTargetFamily = target.konanTarget.family
-                    if (konanTargetFamily == Family.OSX || konanTargetFamily == Family.IOS) {
-                        dependsOn(darwinMain)
-                    } else if (konanTargetFamily == Family.LINUX) {
-                        dependsOn(linuxMain)
-                    } else {
-                        throw new GradleException("unknown native target ${target}")
-                    }
+                    dependsOn(nativeMain)
 
                     // Required for WeakReference usage
                     languageSettings.optIn("kotlin.experimental.ExperimentalNativeApi")
