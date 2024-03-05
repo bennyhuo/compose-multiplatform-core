@@ -23,14 +23,19 @@ import androidx.compose.compiler.plugins.kotlin.lower.ComposableSymbolRemapper
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.ir.IrStatement
-import org.jetbrains.kotlin.ir.declarations.*
+import org.jetbrains.kotlin.ir.declarations.IrDeclaration
+import org.jetbrains.kotlin.ir.declarations.IrFunction
+import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
+import org.jetbrains.kotlin.ir.declarations.IrProperty
 import org.jetbrains.kotlin.ir.expressions.impl.IrConstructorCallImpl
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.ir.types.IrSimpleType
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.classOrNull
 import org.jetbrains.kotlin.ir.types.defaultType
-import org.jetbrains.kotlin.ir.util.*
+import org.jetbrains.kotlin.ir.util.constructors
+import org.jetbrains.kotlin.ir.util.isLocal
+import org.jetbrains.kotlin.ir.util.superTypes
 import org.jetbrains.kotlin.ir.visitors.transformChildrenVoid
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.platform.konan.isNative
@@ -66,7 +71,9 @@ class AddHiddenFromObjCLowering(
 
     override fun visitFunction(declaration: IrFunction): IrStatement {
         val f = super.visitFunction(declaration) as IrFunction
-        if (f.isLocal || !(f.visibility == DescriptorVisibilities.PUBLIC || f.visibility == DescriptorVisibilities.PROTECTED)) return f
+        if (f.isLocal || !(f.visibility == DescriptorVisibilities.PUBLIC ||
+                f.visibility == DescriptorVisibilities.PROTECTED))
+            return f
 
         val shouldAdd = f.hasComposableAnnotation() ||
             f.typeParameters.any { it.defaultType.hasComposable() } ||
@@ -99,8 +106,7 @@ class AddHiddenFromObjCLowering(
         return p
     }
 
-    private fun IrType?.isCompositionLocal(): Boolean {
-        if (this == null) return false
+    private fun IrType.isCompositionLocal(): Boolean {
         if (this.classOrNull == compositionLocalClassSymbol) return true
         return this.superTypes().any {
             it.isCompositionLocal()

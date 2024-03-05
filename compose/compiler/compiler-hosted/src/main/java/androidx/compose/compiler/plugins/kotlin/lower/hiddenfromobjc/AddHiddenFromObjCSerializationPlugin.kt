@@ -56,7 +56,10 @@ class AddHiddenFromObjCSerializationPlugin(
     ) {
         if (descriptor in hideFromObjCDeclarationsSet) {
             val annotationProto = createAnnotationProto(extension)
-            proto.addExtension(KlibMetadataSerializerProtocol.constructorAnnotation, annotationProto)
+            proto.addExtension(
+                KlibMetadataSerializerProtocol.constructorAnnotation,
+                annotationProto
+            )
             proto.flags = proto.flags or hasAnnotationFlag
         }
     }
