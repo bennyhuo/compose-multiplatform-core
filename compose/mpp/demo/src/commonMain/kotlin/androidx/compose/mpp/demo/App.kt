@@ -55,6 +55,7 @@ val MainScreen = Screen.Selection(
     Screen.Example("Blending") { Blending() },
     Screen.Example("FontRasterization") { FontRasterization() },
     Screen.Example("InteropOrder") { InteropOrder() },
+    Screen.Example("Navigation") { Navigation() },
     AndroidTextFieldSamples,
 )
 
