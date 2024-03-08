@@ -39,7 +39,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastAll
 import androidx.compose.ui.util.fastAny
 import androidx.compose.ui.util.fastForEach
-import kotlinx.coroutines.*
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 /**
  * Detects tap, double-tap, and long press gestures and calls [onTap], [onDoubleTap], and
@@ -224,14 +227,18 @@ internal suspend fun PointerInputScope.detectRepeatingTapGestures(
     awaitEachGesture {
         val touchesCounter = ClicksCounter(viewConfiguration, clicksSlop = 50.dp.toPx())
         while (true) {
-            val down = awaitFirstDown()
-            touchesCounter.update(down)
-            val downChange = down
+            val downChange = awaitFirstDown()
+            touchesCounter.update(downChange)
             when (touchesCounter.clicks) {
                 1 -> {
                     if (onTap != null) {
-                        onTap(downChange.position)
-                        downChange.consume()
+                        awaitReleaseOrCancelled(
+                            filter = { PointerMatcher.Primary.matches(it) },
+                            consumeUntilRelease = false
+                        )?.changes?.last()?.let {
+                            onTap(it.position)
+                            it.consume()
+                        }
                     }
                 }
 
