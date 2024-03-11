@@ -215,12 +215,12 @@ internal suspend fun AwaitPointerEventScope.awaitPress(
  *
  * The order of callback execution is guaranteed.
  *
- * @param onTap  A callback function that will be called when a single tap gesture is detected. It will receive the position (Offset) where the tap occurred.
+ * @param onTapRelease  A callback function that will be called when a single tap and release gesture is detected. It will receive the position (Offset) where the tap occurred.
  * @param onDoubleTap  A callback function that will be called when a double tap gesture is detected. It will receive the position (Offset) where the tap occurred.
  * @param onTripleTap  A callback function that will be called when a triple tap gesture is detected. It will receive the position (Offset) where the tap occurred.
  */
 internal suspend fun PointerInputScope.detectRepeatingTapGestures(
-    onTap: ((Offset) -> Unit)? = null,
+    onTapRelease: ((Offset) -> Unit)? = null,
     onDoubleTap: ((Offset) -> Unit)? = null,
     onTripleTap: ((Offset) -> Unit)? = null,
 ) {
@@ -231,12 +231,12 @@ internal suspend fun PointerInputScope.detectRepeatingTapGestures(
             touchesCounter.update(downChange)
             when (touchesCounter.clicks) {
                 1 -> {
-                    if (onTap != null) {
+                    if (onTapRelease != null) {
                         awaitReleaseOrCancelled(
                             filter = { PointerMatcher.Primary.matches(it) },
                             consumeUntilRelease = false
                         )?.changes?.last()?.let {
-                            onTap(it.position)
+                            onTapRelease(it.position)
                             it.consume()
                         }
                     }

@@ -99,7 +99,7 @@ private fun getTapHandlerModifier(
     */
     return Modifier.pointerInput(interactionSource) {
         detectRepeatingTapGestures(
-            onTap = { touchPointOffset ->
+            onTapRelease = { touchPointOffset ->
                 if (currentState.hasFocus) {
                     // To show keyboard if it was hidden. Even in selection mode (like native)
                     requestFocusAndShowKeyboardIfNeeded(
