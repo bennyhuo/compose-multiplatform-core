@@ -112,9 +112,9 @@ internal class UIKitTextInputService(
 
         textUIView?.removeFromSuperview()
         textUIView = IntermediateTextInputUIView(
-            keyboardEventHandler = keyboardEventHandler,
             viewConfiguration = viewConfiguration
         ).also {
+            it.keyboardEventHandler = keyboardEventHandler
             rootView.addSubview(it)
             it.translatesAutoresizingMaskIntoConstraints = false
             NSLayoutConstraint.activateConstraints(
@@ -136,8 +136,10 @@ internal class UIKitTextInputService(
 
         textUIView?.inputTraits = EmptyInputTraits
         textUIView?.input = null
+        textUIView?.keyboardEventHandler = null
         textUIView?.let { view ->
             mainScope.launch {
+                view.resignFirstResponder()
                 view.removeFromSuperview()
             }
         }

@@ -52,6 +52,7 @@ import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.semantics.SemanticsOwner
 import androidx.compose.ui.uikit.ComposeUIViewControllerConfiguration
 import androidx.compose.ui.uikit.LocalKeyboardOverlapHeight
+import androidx.compose.ui.uikit.LocalKeyboardBottomInset
 import androidx.compose.ui.uikit.systemDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.DpOffset
@@ -66,10 +67,10 @@ import androidx.compose.ui.unit.round
 import androidx.compose.ui.unit.roundToIntRect
 import androidx.compose.ui.unit.toDpRect
 import androidx.compose.ui.unit.toOffset
+import androidx.compose.ui.window.ComposeContainerKeyboardManager
 import androidx.compose.ui.window.FocusStack
 import androidx.compose.ui.window.InteractionUIView
 import androidx.compose.ui.window.KeyboardEventHandler
-import androidx.compose.ui.window.KeyboardVisibilityListenerImpl
 import androidx.compose.ui.window.RenderingUIView
 import androidx.compose.ui.window.UITouchesEventPhase
 import kotlin.coroutines.CoroutineContext
@@ -77,7 +78,6 @@ import kotlin.math.floor
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 import kotlinx.cinterop.CValue
-import kotlinx.cinterop.ObjCAction
 import kotlinx.cinterop.readValue
 import kotlinx.cinterop.useContents
 import org.jetbrains.skia.Canvas
@@ -91,21 +91,15 @@ import platform.CoreGraphics.CGRect
 import platform.CoreGraphics.CGRectMake
 import platform.CoreGraphics.CGRectZero
 import platform.CoreGraphics.CGSize
-import platform.Foundation.NSNotification
-import platform.Foundation.NSNotificationCenter
-import platform.Foundation.NSSelectorFromString
 import platform.Foundation.NSTimeInterval
 import platform.QuartzCore.CATransaction
 import platform.UIKit.NSLayoutConstraint
 import platform.UIKit.UIEvent
-import platform.UIKit.UIKeyboardWillHideNotification
-import platform.UIKit.UIKeyboardWillShowNotification
 import platform.UIKit.UITouch
 import platform.UIKit.UITouchPhase
 import platform.UIKit.UIView
 import platform.UIKit.UIViewControllerTransitionCoordinatorProtocol
 import platform.UIKit.UIWindow
-import platform.darwin.NSObject
 
 /**
  * Layout of sceneView on the screen
@@ -191,22 +185,6 @@ private class RenderingUIViewDelegateImpl(
     }
 }
 
-private class NativeKeyboardVisibilityListener(
-    private val keyboardVisibilityListener: KeyboardVisibilityListenerImpl
-) : NSObject() {
-    @Suppress("unused")
-    @ObjCAction
-    fun keyboardWillShow(arg: NSNotification) {
-        keyboardVisibilityListener.keyboardWillShow(arg)
-    }
-
-    @Suppress("unused")
-    @ObjCAction
-    fun keyboardWillHide(arg: NSNotification) {
-        keyboardVisibilityListener.keyboardWillHide(arg)
-    }
-}
-
 private class ComposeSceneMediatorRootUIView : UIView(CGRectZero.readValue()) {
     override fun hitTest(point: CValue<CGPoint>, withEvent: UIEvent?): UIView? {
         // forwards touches forward to the children, is never a target for a touch
@@ -233,7 +211,6 @@ internal class ComposeSceneMediator(
         coroutineContext: CoroutineContext
     ) -> ComposeScene
 ) {
-    private val focusable: Boolean get() = focusStack != null
     private val keyboardOverlapHeightState: MutableState<Float> = mutableStateOf(0f)
     private var _layout: SceneLayout = SceneLayout.Undefined
     private var constraints: List<NSLayoutConstraint> = emptyList()
@@ -266,7 +243,7 @@ internal class ComposeSceneMediator(
         set(value) {
             scene.compositionLocalContext = value
         }
-    private val focusManager get() = scene.focusManager
+    val focusManager get() = scene.focusManager
 
     private val renderingView by lazy {
         renderingUIViewFactory(renderDelegate)
@@ -342,14 +319,13 @@ internal class ComposeSceneMediator(
         )
     }
 
-    private val keyboardVisibilityListener by lazy {
-        KeyboardVisibilityListenerImpl(
+    private val keyboardManager by lazy {
+        ComposeContainerKeyboardManager(
             configuration = configuration,
             keyboardOverlapHeightState = keyboardOverlapHeightState,
-            viewProvider = { container },
-            densityProvider = { container.systemDensity },
-            composeSceneMediatorProvider = { this },
-            focusManager = focusManager,
+            viewProvider = { rootView },
+            densityProvider = { rootView.systemDensity },
+            composeSceneMediatorProvider = { this }
         )
     }
 
@@ -508,13 +484,16 @@ internal class ComposeSceneMediator(
             LocalUIKitInteropContext provides interopContext,
             LocalUIKitInteropContainer provides interopViewContainer,
             LocalKeyboardOverlapHeight provides keyboardOverlapHeightState.value,
+            LocalKeyboardBottomInset provides keyboardOverlapHeightState,
             LocalSafeArea provides safeAreaState.value,
             LocalLayoutMargins provides layoutMarginsState.value,
             content = content
         )
 
     fun dispose() {
+        uiKitTextInputService.stopInput()
         focusStack?.popUntilNext(renderingView)
+        keyboardManager.stop()
         renderingView.dispose()
         interactionView.dispose()
         rootView.removeFromSuperview()
@@ -646,37 +625,12 @@ internal class ComposeSceneMediator(
         )
     }
 
-    private val nativeKeyboardVisibilityListener = NativeKeyboardVisibilityListener(
-        keyboardVisibilityListener
-    )
-
-    fun viewDidAppear(animated: Boolean) {
-        NSNotificationCenter.defaultCenter.addObserver(
-            observer = nativeKeyboardVisibilityListener,
-            selector = NSSelectorFromString(nativeKeyboardVisibilityListener::keyboardWillShow.name + ":"),
-            name = UIKeyboardWillShowNotification,
-            `object` = null
-        )
-        NSNotificationCenter.defaultCenter.addObserver(
-            observer = nativeKeyboardVisibilityListener,
-            selector = NSSelectorFromString(nativeKeyboardVisibilityListener::keyboardWillHide.name + ":"),
-            name = UIKeyboardWillHideNotification,
-            `object` = null
-        )
+    fun sceneDidAppear() {
+        keyboardManager.start()
     }
 
-    // viewDidUnload() is deprecated and not called.
-    fun viewWillDisappear(animated: Boolean) {
-        NSNotificationCenter.defaultCenter.removeObserver(
-            observer = nativeKeyboardVisibilityListener,
-            name = UIKeyboardWillShowNotification,
-            `object` = null
-        )
-        NSNotificationCenter.defaultCenter.removeObserver(
-            observer = nativeKeyboardVisibilityListener,
-            name = UIKeyboardWillHideNotification,
-            `object` = null
-        )
+    fun sceneWillDisappear() {
+        keyboardManager.stop()
     }
 
     fun getViewHeight(): Double = renderingView.frame.useContents {
