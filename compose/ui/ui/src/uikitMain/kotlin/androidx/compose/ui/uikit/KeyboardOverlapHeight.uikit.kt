@@ -17,19 +17,19 @@
 package androidx.compose.ui.uikit
 
 import androidx.compose.runtime.InternalComposeApi
-import androidx.compose.runtime.State
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.compositionLocalOf
 
 
 /**
  * Composition local for height that is overlapped with keyboard over Compose view.
  */
-@Deprecated("Use LocalWindowKeyboardInsets instead")
 @InternalComposeApi
-val LocalKeyboardOverlapHeight = staticCompositionLocalOf { 0f }
+val LocalKeyboardOverlapHeight = compositionLocalOf { 0f }
 
+/**
+ * Composition local for Selection Handlers vertical offset.
+ * Applied when [OnFocusBehavior.FocusableAboveKeyboard] used and
+ * [ComposeUIViewControllerConfiguration.platformLayers] are enabled.
+ */
 @InternalComposeApi
-val LocalKeyboardBottomInset = staticCompositionLocalOf<State<Float>> {
-    mutableStateOf(0f)
-}
+val LocalTextSelectionHandlersOffset = compositionLocalOf { 0f }

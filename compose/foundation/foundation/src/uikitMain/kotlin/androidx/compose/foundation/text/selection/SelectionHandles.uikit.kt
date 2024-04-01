@@ -24,6 +24,7 @@ import androidx.compose.foundation.text.selection.HandleReferencePoint.TopLeft
 import androidx.compose.foundation.text.selection.HandleReferencePoint.TopMiddle
 import androidx.compose.foundation.text.selection.HandleReferencePoint.TopRight
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.InternalComposeApi
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
@@ -35,6 +36,7 @@ import androidx.compose.ui.geometry.takeOrElse
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.ResolvedTextDirection
+import androidx.compose.ui.uikit.LocalTextSelectionHandlersOffset
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
@@ -60,6 +62,7 @@ private val RADIUS = 6.dp
  */
 private val THICKNESS = 2.dp
 
+@OptIn(InternalComposeApi::class)
 @Composable
 internal actual fun SelectionHandle(
     offsetProvider: OffsetProvider,
@@ -148,6 +151,7 @@ internal fun Modifier.drawSelectionHandle(
     }
 }
 
+@OptIn(InternalComposeApi::class)
 @Composable
 internal fun HandlePopup(
     offset: Offset,
@@ -155,8 +159,13 @@ internal fun HandlePopup(
     handleReferencePoint: HandleReferencePoint,
     content: @Composable () -> Unit
 ) {
-    val popupPositionProvider = remember(handleReferencePoint, positionProvider, offset) {
-        HandlePositionProvider(handleReferencePoint, positionProvider, offset)
+    val cursorOffset = with(LocalDensity.current) {
+        LocalTextSelectionHandlersOffset.current.dp.toPx()
+    }
+    val handleOffset = offset.copy(y = offset.y - cursorOffset)
+
+    val popupPositionProvider = remember(handleReferencePoint, positionProvider, handleOffset) {
+        HandlePositionProvider(handleReferencePoint, positionProvider, handleOffset)
     }
     Popup(
         popupPositionProvider = popupPositionProvider,

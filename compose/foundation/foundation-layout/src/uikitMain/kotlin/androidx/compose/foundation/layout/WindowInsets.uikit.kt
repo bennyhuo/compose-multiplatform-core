@@ -18,16 +18,13 @@ package androidx.compose.foundation.layout
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.InternalComposeApi
-import androidx.compose.runtime.State
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.platform.LocalLayoutMargins
 import androidx.compose.ui.platform.LocalSafeArea
 import androidx.compose.ui.platform.PlatformInsets
 import androidx.compose.ui.uikit.InterfaceOrientation
 import androidx.compose.ui.uikit.LocalInterfaceOrientation
-import androidx.compose.ui.uikit.LocalKeyboardBottomInset
-import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.uikit.LocalKeyboardOverlapHeight
 import androidx.compose.ui.unit.dp
 
 private val ZeroInsets = WindowInsets(0, 0, 0, 0)
@@ -39,20 +36,6 @@ private fun PlatformInsets.toWindowInsets() = WindowInsets(
     right = right,
     bottom = bottom,
 )
-
-private class ImeWindowInsets(
-    val keyboardBottomInset: State<Float>
-): WindowInsets {
-    override fun getLeft(density: Density, layoutDirection: LayoutDirection): Int = 0
-
-    override fun getTop(density: Density): Int = 0
-
-    override fun getRight(density: Density, layoutDirection: LayoutDirection): Int = 0
-
-    override fun getBottom(density: Density): Int = with(density) {
-        keyboardBottomInset.value.dp.roundToPx()
-    }
-}
 
 /**
  * This insets represents iOS SafeAreas.
@@ -97,7 +80,7 @@ actual val WindowInsets.Companion.displayCutout: WindowInsets
 actual val WindowInsets.Companion.ime: WindowInsets
     @Composable
     @OptIn(InternalComposeApi::class)
-    get() = ImeWindowInsets(LocalKeyboardBottomInset.current)
+    get() = WindowInsets(bottom = LocalKeyboardOverlapHeight.current.dp)
 
 /**
  * These insets represent the space where system gestures have priority over application gestures.

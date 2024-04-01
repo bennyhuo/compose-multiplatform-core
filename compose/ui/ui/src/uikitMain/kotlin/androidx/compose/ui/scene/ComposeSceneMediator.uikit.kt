@@ -52,7 +52,7 @@ import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.semantics.SemanticsOwner
 import androidx.compose.ui.uikit.ComposeUIViewControllerConfiguration
 import androidx.compose.ui.uikit.LocalKeyboardOverlapHeight
-import androidx.compose.ui.uikit.LocalKeyboardBottomInset
+import androidx.compose.ui.uikit.LocalTextSelectionHandlersOffset
 import androidx.compose.ui.uikit.systemDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.DpOffset
@@ -67,7 +67,7 @@ import androidx.compose.ui.unit.round
 import androidx.compose.ui.unit.roundToIntRect
 import androidx.compose.ui.unit.toDpRect
 import androidx.compose.ui.unit.toOffset
-import androidx.compose.ui.window.ComposeContainerKeyboardManager
+import androidx.compose.ui.window.ComposeSceneKeyboardOffsetManager
 import androidx.compose.ui.window.FocusStack
 import androidx.compose.ui.window.InteractionUIView
 import androidx.compose.ui.window.KeyboardEventHandler
@@ -212,6 +212,7 @@ internal class ComposeSceneMediator(
     ) -> ComposeScene
 ) {
     private val keyboardOverlapHeightState: MutableState<Float> = mutableStateOf(0f)
+    private val textSelectionHandlersOffsetState: MutableState<Float> = mutableStateOf(0f)
     private var _layout: SceneLayout = SceneLayout.Undefined
     private var constraints: List<NSLayoutConstraint> = emptyList()
         set(value) {
@@ -320,9 +321,10 @@ internal class ComposeSceneMediator(
     }
 
     private val keyboardManager by lazy {
-        ComposeContainerKeyboardManager(
+        ComposeSceneKeyboardOffsetManager(
             configuration = configuration,
             keyboardOverlapHeightState = keyboardOverlapHeightState,
+            textSelectionHandlersOffsetState = textSelectionHandlersOffsetState,
             viewProvider = { rootView },
             densityProvider = { rootView.systemDensity },
             composeSceneMediatorProvider = { this }
@@ -343,8 +345,8 @@ internal class ComposeSceneMediator(
                 renderingView.setNeedsDisplay() // redraw on next frame
                 CATransaction.flush() // clear all animations
             },
-            rootViewProvider = { container },
-            densityProvider = { container.systemDensity },
+            rootViewProvider = { rootView },
+            densityProvider = { rootView.systemDensity },
             viewConfiguration = viewConfiguration,
             focusStack = focusStack,
             keyboardEventHandler = keyboardEventHandler
@@ -484,7 +486,7 @@ internal class ComposeSceneMediator(
             LocalUIKitInteropContext provides interopContext,
             LocalUIKitInteropContainer provides interopViewContainer,
             LocalKeyboardOverlapHeight provides keyboardOverlapHeightState.value,
-            LocalKeyboardBottomInset provides keyboardOverlapHeightState,
+            LocalTextSelectionHandlersOffset provides textSelectionHandlersOffsetState.value,
             LocalSafeArea provides safeAreaState.value,
             LocalLayoutMargins provides layoutMarginsState.value,
             content = content
