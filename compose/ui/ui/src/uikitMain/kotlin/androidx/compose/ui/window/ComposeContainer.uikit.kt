@@ -26,6 +26,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.LocalSystemTheme
 import androidx.compose.ui.SystemTheme
 import androidx.compose.ui.interop.LocalUIViewController
+import androidx.compose.ui.interop.UIKitInteropContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.PlatformContext
 import androidx.compose.ui.platform.PlatformWindowContext
 import androidx.compose.ui.scene.ComposeScene
@@ -92,6 +94,8 @@ internal class ComposeContainer(
     private val configuration: ComposeUIViewControllerConfiguration,
     private val content: @Composable () -> Unit,
 ) : CMPViewController(nibName = null, bundle = null) {
+    val lifecycleOwner = ViewControllerBasedLifecycleOwner()
+
     private var isInsideSwiftUI = false
     private var mediator: ComposeSceneMediator? = null
     private val layers: MutableList<UIViewComposeSceneLayer> = mutableListOf()
@@ -235,6 +239,8 @@ internal class ComposeContainer(
 
         isInsideSwiftUI = checkIfInsideSwiftUI()
         createMediatorIfNeeded()
+
+        lifecycleOwner.handleViewWillAppear()
         configuration.delegate.viewWillAppear(animated)
     }
 
@@ -266,6 +272,7 @@ internal class ComposeContainer(
             kotlin.native.internal.GC.collect()
         }
 
+        lifecycleOwner.handleViewDidDisappear()
         configuration.delegate.viewDidDisappear(animated)
     }
 
@@ -284,8 +291,8 @@ internal class ComposeContainer(
         ComposeSceneContextImpl(platformContext)
 
     @OptIn(ExperimentalComposeApi::class)
-    private fun createSkikoUIView(renderRelegate: RenderingUIView.Delegate): RenderingUIView =
-        RenderingUIView(renderDelegate = renderRelegate).apply {
+    private fun createSkikoUIView(interopContext: UIKitInteropContext, renderRelegate: SkikoRenderDelegate): RenderingUIView =
+        RenderingUIView(interopContext, renderRelegate).apply {
             opaque = configuration.opaque
         }
 
@@ -340,6 +347,7 @@ internal class ComposeContainer(
     }
 
     private fun dispose() {
+        lifecycleOwner.dispose()
         mediator?.dispose()
         mediator = null
         layers.fastForEach {
@@ -427,6 +435,7 @@ internal fun ProvideContainerCompositionLocals(
         LocalUIViewController provides this,
         LocalInterfaceOrientation provides interfaceOrientationState.value,
         LocalSystemTheme provides systemThemeState.value,
+        LocalLifecycleOwner provides lifecycleOwner,
         content = content
     )
 }
