@@ -50,8 +50,8 @@ import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.semantics.SemanticsOwner
 import androidx.compose.ui.uikit.ComposeUIViewControllerConfiguration
-import androidx.compose.ui.uikit.KeyboardSceneDisplayParameters
-import androidx.compose.ui.uikit.LocalKeyboardSceneDisplayParameters
+import androidx.compose.ui.uikit.LocalSoftwareKeyboardState
+import androidx.compose.ui.uikit.SoftwareKeyboardState
 import androidx.compose.ui.uikit.systemDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntRect
@@ -212,8 +212,9 @@ internal class ComposeSceneMediator(
         coroutineContext: CoroutineContext
     ) -> ComposeScene
 ) {
-    private val keyboardSceneDisplayParameters = mutableStateOf(
-        KeyboardSceneDisplayParameters.initial
+    @OptIn(InternalComposeApi::class)
+    private val softwareKeyboardState = mutableStateOf(
+        SoftwareKeyboardState.Initial
     )
     private var _layout: SceneLayout = SceneLayout.Undefined
     private var constraints: List<NSLayoutConstraint> = emptyList()
@@ -329,10 +330,11 @@ internal class ComposeSceneMediator(
         )
     }
 
+    @OptIn(InternalComposeApi::class)
     private val keyboardManager by lazy {
         ComposeSceneKeyboardOffsetManager(
             configuration = configuration,
-            keyboardSceneDisplayParameters = keyboardSceneDisplayParameters,
+            softwareKeyboardState = softwareKeyboardState,
             viewProvider = { rootView },
             densityProvider = { rootView.systemDensity },
             composeSceneMediatorProvider = { this }
@@ -493,7 +495,7 @@ internal class ComposeSceneMediator(
         CompositionLocalProvider(
             LocalUIKitInteropContext provides interopContext,
             LocalUIKitInteropContainer provides interopViewContainer,
-            LocalKeyboardSceneDisplayParameters provides keyboardSceneDisplayParameters.value,
+            LocalSoftwareKeyboardState provides softwareKeyboardState.value,
             LocalSafeArea provides safeAreaState.value,
             LocalLayoutMargins provides layoutMarginsState.value,
             content = content

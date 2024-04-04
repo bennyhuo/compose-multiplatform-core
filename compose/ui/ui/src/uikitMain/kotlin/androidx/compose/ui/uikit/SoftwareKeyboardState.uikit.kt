@@ -18,33 +18,33 @@ package androidx.compose.ui.uikit
 
 import androidx.compose.runtime.InternalComposeApi
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.ui.unit.Dp
 
 
-data class KeyboardSceneDisplayParameters(
+@InternalComposeApi
+data class SoftwareKeyboardState(
     /**
      * Height that is overlapped with keyboard over Compose view.
      */
-    val imeBottomInset: Float,
+    val imeBottomInset: Dp,
 
     /**
      * Selection Handlers vertical offset when keyboard is visible.
      * Applied when [OnFocusBehavior.FocusableAboveKeyboard] used and
      * [ComposeUIViewControllerConfiguration.platformLayers] are enabled.
      */
-    val textSelectionHandlersOffset: Float
+    val textSelectionHandlersOffset: Dp
 ) {
     companion object {
-        val initial = KeyboardSceneDisplayParameters(
-            imeBottomInset = 0f,
-            textSelectionHandlersOffset = 0f
+        internal val Initial = SoftwareKeyboardState(
+            imeBottomInset = Dp(0f),
+            textSelectionHandlersOffset = Dp(0f)
         )
     }
 }
 
 /**
- * Composition local for keyboard display parameters for the current scene.
+ * Composition local for software keyboard state for the current scene.
  */
 @InternalComposeApi
-val LocalKeyboardSceneDisplayParameters = compositionLocalOf {
-    KeyboardSceneDisplayParameters.initial
-}
+val LocalSoftwareKeyboardState = compositionLocalOf { SoftwareKeyboardState.Initial }

@@ -17,12 +17,14 @@
 package androidx.compose.ui.window
 
 import androidx.compose.runtime.ExperimentalComposeApi
+import androidx.compose.runtime.InternalComposeApi
 import androidx.compose.runtime.MutableState
 import androidx.compose.ui.scene.ComposeSceneMediator
 import androidx.compose.ui.uikit.ComposeUIViewControllerConfiguration
-import androidx.compose.ui.uikit.KeyboardSceneDisplayParameters
 import androidx.compose.ui.uikit.OnFocusBehavior
+import androidx.compose.ui.uikit.SoftwareKeyboardState
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toDpRect
 import kotlin.math.max
 import kotlin.math.min
@@ -50,9 +52,10 @@ import platform.darwin.dispatch_async
 import platform.darwin.dispatch_get_main_queue
 import platform.darwin.sel_registerName
 
+@OptIn(InternalComposeApi::class)
 internal class ComposeSceneKeyboardOffsetManager(
     private val configuration: ComposeUIViewControllerConfiguration,
-    private val keyboardSceneDisplayParameters: MutableState<KeyboardSceneDisplayParameters>,
+    private val softwareKeyboardState: MutableState<SoftwareKeyboardState>,
     private val viewProvider: () -> UIView,
     private val densityProvider: () -> Density,
     private val composeSceneMediatorProvider: () -> ComposeSceneMediator?
@@ -175,9 +178,9 @@ internal class ComposeSceneKeyboardOffsetManager(
                 0f
             }
 
-            keyboardSceneDisplayParameters.value = KeyboardSceneDisplayParameters(
-                imeBottomInset = currentOverlapHeight.toFloat(),
-                textSelectionHandlersOffset = textSelectionHandlersOffset
+            softwareKeyboardState.value = SoftwareKeyboardState(
+                imeBottomInset = currentOverlapHeight.dp,
+                textSelectionHandlersOffset = textSelectionHandlersOffset.dp
             )
         }
 
