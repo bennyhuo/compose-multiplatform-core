@@ -50,12 +50,10 @@ import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.semantics.SemanticsOwner
 import androidx.compose.ui.uikit.ComposeUIViewControllerConfiguration
-import androidx.compose.ui.uikit.LocalKeyboardOverlapHeight
-import androidx.compose.ui.uikit.LocalTextSelectionHandlersOffset
+import androidx.compose.ui.uikit.KeyboardSceneDisplayParameters
+import androidx.compose.ui.uikit.LocalKeyboardSceneDisplayParameters
 import androidx.compose.ui.uikit.systemDensity
 import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.DpOffset
-import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.asCGRect
@@ -89,10 +87,6 @@ import platform.CoreGraphics.CGRect
 import platform.CoreGraphics.CGRectMake
 import platform.CoreGraphics.CGRectZero
 import platform.CoreGraphics.CGSize
-import platform.Foundation.NSTimeInterval
-import platform.Foundation.NSNotification
-import platform.Foundation.NSNotificationCenter
-import platform.Foundation.NSSelectorFromString
 import platform.QuartzCore.CATransaction
 import platform.UIKit.NSLayoutConstraint
 import platform.UIKit.UIEvent
@@ -218,8 +212,9 @@ internal class ComposeSceneMediator(
         coroutineContext: CoroutineContext
     ) -> ComposeScene
 ) {
-    private val keyboardOverlapHeightState: MutableState<Float> = mutableStateOf(0f)
-    private val textSelectionHandlersOffsetState: MutableState<Float> = mutableStateOf(0f)
+    private val keyboardSceneDisplayParameters = mutableStateOf(
+        KeyboardSceneDisplayParameters.initial
+    )
     private var _layout: SceneLayout = SceneLayout.Undefined
     private var constraints: List<NSLayoutConstraint> = emptyList()
         set(value) {
@@ -337,8 +332,7 @@ internal class ComposeSceneMediator(
     private val keyboardManager by lazy {
         ComposeSceneKeyboardOffsetManager(
             configuration = configuration,
-            keyboardOverlapHeightState = keyboardOverlapHeightState,
-            textSelectionHandlersOffsetState = textSelectionHandlersOffsetState,
+            keyboardSceneDisplayParameters = keyboardSceneDisplayParameters,
             viewProvider = { rootView },
             densityProvider = { rootView.systemDensity },
             composeSceneMediatorProvider = { this }
@@ -499,8 +493,7 @@ internal class ComposeSceneMediator(
         CompositionLocalProvider(
             LocalUIKitInteropContext provides interopContext,
             LocalUIKitInteropContainer provides interopViewContainer,
-            LocalKeyboardOverlapHeight provides keyboardOverlapHeightState.value,
-            LocalTextSelectionHandlersOffset provides textSelectionHandlersOffsetState.value,
+            LocalKeyboardSceneDisplayParameters provides keyboardSceneDisplayParameters.value,
             LocalSafeArea provides safeAreaState.value,
             LocalLayoutMargins provides layoutMarginsState.value,
             content = content

@@ -20,8 +20,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.InternalComposeApi
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.uikit.LocalKeyboardOverlapHeight
-import androidx.compose.ui.uikit.LocalTextSelectionHandlersOffset
+import androidx.compose.ui.uikit.KeyboardSceneDisplayParameters
+import androidx.compose.ui.uikit.LocalKeyboardSceneDisplayParameters
 import androidx.compose.ui.unit.dp
 
 /**
@@ -42,7 +42,9 @@ private object SafeAreaInsetsConfig : InsetsConfig {
         @Composable get() = LocalSafeArea.current
 
     override val ime: PlatformInsets
-        @Composable get() = PlatformInsets(bottom = LocalKeyboardOverlapHeight.current.dp)
+        @Composable get() = PlatformInsets(
+            bottom = LocalKeyboardSceneDisplayParameters.current.imeBottomInset.dp
+        )
 
     @Composable
     override fun excludeInsets(
@@ -52,13 +54,11 @@ private object SafeAreaInsetsConfig : InsetsConfig {
     ) {
         val safeArea = LocalSafeArea.current
         val layoutMargins = LocalLayoutMargins.current
-        val keyboardOverlapHeight = LocalKeyboardOverlapHeight.current
-        val selectionHandlersOffset = LocalTextSelectionHandlersOffset.current
+        val keyboardSceneDisplayParameters = LocalKeyboardSceneDisplayParameters.current
         CompositionLocalProvider(
             LocalSafeArea provides if (safeInsets) PlatformInsets() else safeArea,
             LocalLayoutMargins provides if (safeInsets) layoutMargins.exclude(safeArea) else layoutMargins,
-            LocalKeyboardOverlapHeight provides if (ime) 0f else keyboardOverlapHeight,
-            LocalTextSelectionHandlersOffset provides if (ime) 0f else selectionHandlersOffset,
+            LocalKeyboardSceneDisplayParameters provides if (ime) KeyboardSceneDisplayParameters.initial else keyboardSceneDisplayParameters,
             content = content
         )
     }
