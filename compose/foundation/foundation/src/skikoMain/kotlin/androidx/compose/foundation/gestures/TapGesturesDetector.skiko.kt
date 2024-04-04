@@ -232,10 +232,7 @@ internal suspend fun PointerInputScope.detectRepeatingTapGestures(
             when (touchesCounter.clicks) {
                 1 -> {
                     if (onTapRelease != null) {
-                        awaitReleaseOrCancelled(
-                            filter = { PointerMatcher.Primary.matches(it) },
-                            consumeUntilRelease = false
-                        )?.changes?.last()?.let {
+                        waitForUpOrCancellation()?.let {
                             onTapRelease(it.position)
                             it.consume()
                         }
