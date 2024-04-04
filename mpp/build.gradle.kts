@@ -28,6 +28,36 @@ val mainComponents =
     listOf(
         ComposeComponent(":annotation:annotation", supportedPlatforms = ComposePlatforms.ALL - ComposePlatforms.ANDROID),
         ComposeComponent(":collection:collection", supportedPlatforms = ComposePlatforms.ALL - ComposePlatforms.ANDROID),
+        ComposeComponent(
+            path = ":lifecycle:lifecycle-common",
+            // No android target here - jvm artefact will be used for android apps as well
+            supportedPlatforms = ComposePlatforms.ALL_AOSP - ComposePlatforms.ANDROID
+        ),
+        ComposeComponent(
+            path = ":lifecycle:lifecycle-runtime",
+            supportedPlatforms = ComposePlatforms.ALL_AOSP
+        ),
+        ComposeComponent(
+            path = ":lifecycle:lifecycle-viewmodel",
+            supportedPlatforms = ComposePlatforms.ALL_AOSP
+        ),
+
+        ComposeComponent(
+            path = ":core:core-bundle",
+            supportedPlatforms = ComposePlatforms.ALL_AOSP,
+            neverRedirect = true
+        ),
+        ComposeComponent(":savedstate:savedstate", ComposePlatforms.ALL_AOSP),
+        ComposeComponent(":lifecycle:lifecycle-viewmodel-savedstate", ComposePlatforms.ALL_AOSP),
+
+        ComposeComponent(":navigation:navigation-common", ComposePlatforms.ALL_AOSP),
+        ComposeComponent(":navigation:navigation-runtime", ComposePlatforms.ALL_AOSP),
+
+        //To be added later: (also don't forget to add gradle.properties see in lifecycle-runtime for an example)
+        ComposeComponent(":lifecycle:lifecycle-runtime-compose"),
+        ComposeComponent(":lifecycle:lifecycle-viewmodel-compose"),
+        ComposeComponent(":navigation:navigation-compose"),
+
         ComposeComponent(":compose:animation:animation"),
         ComposeComponent(":compose:animation:animation-core"),
         ComposeComponent(":compose:animation:animation-graphics"),
@@ -59,7 +89,7 @@ val mainComponents =
         ),
         ComposeComponent(
             ":compose:ui:ui-uikit",
-            supportedPlatforms = ComposePlatforms.IOS
+            supportedPlatforms = ComposePlatforms.UI_KIT
         ),
         ComposeComponent(":compose:ui:ui-unit"),
         ComposeComponent(":compose:ui:ui-util"),
@@ -174,6 +204,7 @@ tasks.register("testComposeModules") { // used in https://github.com/JetBrains/a
 }
 
 val mavenCentral = MavenCentralProperties(project)
+val mavenCentralGroup = project.providers.gradleProperty("maven.central.group")
 if (mavenCentral.signArtifacts) {
     signing.useInMemoryPgpKeys(
         mavenCentral.signArtifactsKey.get(),
@@ -187,7 +218,7 @@ val preparedArtifactsRoot = publishingDir.map { it.dir("prepared") }
 val modulesFile = publishingDir.map { it.file("modules.txt") }
 
 val findComposeModules by tasks.registering(FindModulesInSpaceTask::class) {
-    requestedGroupId.set("org.jetbrains.compose")
+    requestedGroupId.set(mavenCentralGroup)
     requestedVersion.set(mavenCentral.version)
     spaceInstanceUrl.set("https://public.jetbrains.space")
     spaceClientId.set(System.getenv("COMPOSE_REPO_USERNAME") ?: "")
@@ -224,7 +255,7 @@ val reuploadArtifactsToMavenCentral by tasks.registering(UploadToSonatypeTask::c
     user.set(mavenCentral.user)
     password.set(mavenCentral.password)
     autoCommitOnSuccess.set(mavenCentral.autoCommitOnSuccess)
-    stagingProfileName.set("org.jetbrains.compose")
+    stagingProfileName.set(mavenCentralGroup)
 }
 
 fun readComposeModules(

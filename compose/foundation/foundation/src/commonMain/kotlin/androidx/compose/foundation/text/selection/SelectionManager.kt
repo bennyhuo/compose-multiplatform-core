@@ -103,7 +103,19 @@ internal class SelectionManager(private val selectionRegistrar: SelectionRegistr
      * change. The expectation is that this callback will end up causing `setSelection` to get
      * called. This is what makes this a "controlled component".
      */
-    var onSelectionChange: (Selection?) -> Unit = {}
+    var onSelectionChange: (Selection?) -> Unit = { selection = it }
+        set(newOnSelectionChange) {
+            // Wrap the given lambda with one that sets the selection immediately.
+            // The onSelectionChange loop requires a composition to happen for the selection
+            // to be updated, so we want to shorten that loop for gesture use cases where
+            // multiple selection changing events can be acted on within a single composition
+            // loop. Previous selection is used as part of that loop so keeping it up to date
+            // is important.
+            field = { newSelection ->
+                selection = newSelection
+                newOnSelectionChange(newSelection)
+            }
+        }
 
     /**
      * [HapticFeedback] handle to perform haptic feedback.
@@ -162,7 +174,7 @@ internal class SelectionManager(private val selectionRegistrar: SelectionRegistr
             .focusable()
             .updateSelectionTouchMode { isInTouchMode = it }
             .onKeyEvent {
-                if (isCopyKeyEvent(it)) {
+                if (!skipCopyKeyEvent && isCopyKeyEvent(it)) {
                     copy()
                     true
                 } else {
@@ -1028,3 +1040,7 @@ private suspend fun AwaitPointerEventScope.awaitPointerEventWhereAllChanges(
     pass: PointerEventPass = PointerEventPass.Main,
     predicate: (PointerInputChange) -> Boolean,
 ) = awaitPointerEvent(pass).takeIf { it.changes.fastAll(predicate) }
+
+
+// We skip `isCopyKeyEvent(it)` on web, because should handle browser 'copy' event
+internal expect val SelectionManager.skipCopyKeyEvent: Boolean

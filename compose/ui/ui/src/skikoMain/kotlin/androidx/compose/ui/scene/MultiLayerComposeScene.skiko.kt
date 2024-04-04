@@ -32,7 +32,6 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEvent
@@ -56,6 +55,7 @@ import androidx.compose.ui.unit.round
 import androidx.compose.ui.util.fastAny
 import androidx.compose.ui.util.fastForEach
 import androidx.compose.ui.util.fastForEachReversed
+import androidx.compose.ui.window.getDialogScrimBlendMode
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
 
@@ -516,7 +516,13 @@ private class MultiLayerComposeSceneImpl(
          * This scenario is important when user code relies on hover events to show tooltips.
          */
         override var boundsInWindow: IntRect by mutableStateOf(IntRect.Zero)
+
+        @Deprecated(
+            message = "Should not be used in this implementation",
+            level = DeprecationLevel.ERROR
+        )
         override var compositionLocalContext: CompositionLocalContext? = null
+
         override var scrimColor: Color? by mutableStateOf(null)
         override var focusable: Boolean = focusable
             set(value) {
@@ -530,20 +536,14 @@ private class MultiLayerComposeSceneImpl(
                 invalidateIfNeeded()
             }
 
-        private val dialogScrimBlendMode
-            get() = if (composeSceneContext.platformContext.isWindowTransparent) {
-                // Use background alpha channel to respect transparent window shape.
-                BlendMode.SrcAtop
-            } else {
-                BlendMode.SrcOver
-            }
-
         private val background: Modifier
             get() = scrimColor?.let {
                 Modifier.drawBehind {
                     drawRect(
                         color = it,
-                        blendMode = dialogScrimBlendMode
+                        blendMode = getDialogScrimBlendMode(
+                            composeSceneContext.platformContext.isWindowTransparent
+                        )
                     )
                 }
             } ?: Modifier
@@ -587,7 +587,14 @@ private class MultiLayerComposeSceneImpl(
             composition?.dispose()
             composition = owner.setContent(
                 parent = this@AttachedComposeSceneLayer.compositionContext,
-                { this@AttachedComposeSceneLayer.compositionLocalContext }
+                {
+                    /*
+                     * Do not use `compositionLocalContext` here - composition locals already
+                     * available from `compositionContext` and explicitly overriding it might cause
+                     * issues. See https://github.com/JetBrains/compose-multiplatform/issues/4558
+                     */
+                    null
+                }
             ) {
                 owner.setRootModifier(background then keyInput)
                 content()

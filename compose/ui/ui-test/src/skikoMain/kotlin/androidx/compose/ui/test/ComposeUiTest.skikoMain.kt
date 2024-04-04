@@ -45,6 +45,7 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.roundToInt
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -74,6 +75,27 @@ fun runSkikoComposeUiTest(
     ).runTest(block)
 }
 
+@InternalTestApi
+@OptIn(InternalComposeUiApi::class, ExperimentalTestApi::class, ExperimentalCoroutinesApi::class)
+fun runInternalSkikoComposeUiTest(
+    width: Int = 1024,
+    height: Int = 768,
+    density: Density = Density(1f),
+    effectContext: CoroutineContext = EmptyCoroutineContext,
+    semanticsOwnerListener: PlatformContext.SemanticsOwnerListener? = null,
+    coroutineDispatcher: TestDispatcher = defaultTestDispatcher(),
+    block: SkikoComposeUiTest.() -> Unit
+) {
+    SkikoComposeUiTest(
+        width = width,
+        height = height,
+        effectContext = effectContext,
+        density = density,
+        semanticsOwnerListener = semanticsOwnerListener,
+        coroutineDispatcher = coroutineDispatcher,
+    ).runTest(block)
+}
+
 /**
  * How often to check idling resources.
  * Empirically checked that Android (espresso, really) tests approximately at this rate.
@@ -81,17 +103,26 @@ fun runSkikoComposeUiTest(
 private const val IDLING_RESOURCES_CHECK_INTERVAL_MS = 20L
 
 /**
+ * Returns the default [TestDispatcher] to use in tests.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+@InternalTestApi
+fun defaultTestDispatcher() = UnconfinedTestDispatcher()
+
+/**
  * @param effectContext The [CoroutineContext] used to run the composition. The context for
  * `LaunchedEffect`s and `rememberCoroutineScope` will be derived from this context.
  */
 @ExperimentalTestApi
-@OptIn(ExperimentalCoroutinesApi::class, InternalTestApi::class, InternalComposeUiApi::class)
-class SkikoComposeUiTest(
+@OptIn(InternalTestApi::class, InternalComposeUiApi::class)
+class SkikoComposeUiTest @InternalTestApi constructor(
     width: Int = 1024,
     height: Int = 768,
     // TODO(https://github.com/JetBrains/compose-multiplatform/issues/2960) Support effectContext
     effectContext: CoroutineContext = EmptyCoroutineContext,
-    override val density: Density = Density(1f)
+    override val density: Density = Density(1f),
+    private val semanticsOwnerListener: PlatformContext.SemanticsOwnerListener?,
+    coroutineDispatcher: TestDispatcher = defaultTestDispatcher(),
 ) : ComposeUiTest {
     init {
         require(effectContext == EmptyCoroutineContext) {
@@ -99,6 +130,19 @@ class SkikoComposeUiTest(
                 "Follow https://github.com/JetBrains/compose-multiplatform/issues/2960"
         }
     }
+
+    constructor(
+        width: Int = 1024,
+        height: Int = 768,
+        effectContext: CoroutineContext = EmptyCoroutineContext,
+        density: Density = Density(1f),
+    ) : this (
+        width = width,
+        height = height,
+        effectContext = effectContext,
+        density = density,
+        semanticsOwnerListener = null,
+    )
 
     private class Session(
         var imeOptions: ImeOptions,
@@ -108,7 +152,6 @@ class SkikoComposeUiTest(
 
     private val composeRootRegistry = ComposeRootRegistry()
 
-    private val coroutineDispatcher = UnconfinedTestDispatcher()
     private val testScope = TestScope(coroutineDispatcher)
     override val mainClock: MainTestClock = MainTestClockImpl(
         testScheduler = coroutineDispatcher.scheduler,
@@ -134,7 +177,7 @@ class SkikoComposeUiTest(
         @InternalTestApi
         set
 
-    private val testOwner = DesktopTestOwner()
+    private val testOwner = SkikoTestOwner()
     private val testContext = createTestContext(testOwner)
 
     private val idlingResources = mutableSetOf<IdlingResource>()
@@ -274,7 +317,6 @@ class SkikoComposeUiTest(
         idlingResources.all { it.isIdleNow }
     }
 
-    @OptIn(ExperimentalComposeUiApi::class)
     override fun setContent(composable: @Composable () -> Unit) {
         if (isOnUiThread()) {
             scene.setContent(content = composable)
@@ -321,7 +363,7 @@ class SkikoComposeUiTest(
     }
 
     @OptIn(InternalComposeUiApi::class)
-    private inner class DesktopTestOwner : TestOwner, SkikoTestOwner {
+    internal inner class SkikoTestOwner : TestOwner {
         override fun <T> runOnUiThread(action: () -> T): T {
             return this@SkikoComposeUiTest.runOnUiThread(action)
         }
@@ -334,7 +376,7 @@ class SkikoComposeUiTest(
         override val mainClock get() =
             this@SkikoComposeUiTest.mainClock
 
-        override fun captureToImage(semanticsNode: SemanticsNode): ImageBitmap =
+        fun captureToImage(semanticsNode: SemanticsNode): ImageBitmap =
             this@SkikoComposeUiTest.captureToImage(semanticsNode)
     }
 
@@ -373,13 +415,15 @@ class SkikoComposeUiTest(
     }
 
     private inner class TestContext : PlatformContext by PlatformContext.Empty {
-        override val windowInfo: WindowInfo =
-            TestWindowInfo()
-        override val textInputService: PlatformTextInputService =
-            TestTextInputService()
+        override val windowInfo: WindowInfo = TestWindowInfo()
 
-        override val rootForTestListener: PlatformContext.RootForTestListener?
+        override val textInputService: PlatformTextInputService = TestTextInputService()
+
+        override val rootForTestListener: PlatformContext.RootForTestListener
             get() = composeRootRegistry
+
+        override val semanticsOwnerListener: PlatformContext.SemanticsOwnerListener?
+            get() = this@SkikoComposeUiTest.semanticsOwnerListener
     }
 
     private inner class TestComposeSceneContext : ComposeSceneContext {
