@@ -155,10 +155,10 @@ private fun getTapHandlerModifier(
                     currentState.handleState = HandleState.Cursor
                 }
             },
-            onDoubleTap = {
+            onDoubleTapPress = {
                 currentManager.doRepeatingTapSelection(it, SelectionAdjustment.Word)
             },
-            onTripleTap = {
+            onTripleTapPress = {
                 currentManager.doRepeatingTapSelection(it, SelectionAdjustment.Paragraph)
             }
         )

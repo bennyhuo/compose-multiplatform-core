@@ -216,13 +216,13 @@ internal suspend fun AwaitPointerEventScope.awaitPress(
  * The order of callback execution is guaranteed.
  *
  * @param onTapRelease  A callback function that will be called when a single tap and release gesture is detected. It will receive the position (Offset) where the tap occurred.
- * @param onDoubleTap  A callback function that will be called when a double tap gesture is detected. It will receive the position (Offset) where the tap occurred.
- * @param onTripleTap  A callback function that will be called when a triple tap gesture is detected. It will receive the position (Offset) where the tap occurred.
+ * @param onDoubleTapPress  A callback function that will be called when a double tap gesture is detected. It will receive the position (Offset) where the tap occurred.
+ * @param onTripleTapPress  A callback function that will be called when a triple tap gesture is detected. It will receive the position (Offset) where the tap occurred.
  */
 internal suspend fun PointerInputScope.detectRepeatingTapGestures(
     onTapRelease: ((Offset) -> Unit)? = null,
-    onDoubleTap: ((Offset) -> Unit)? = null,
-    onTripleTap: ((Offset) -> Unit)? = null,
+    onDoubleTapPress: ((Offset) -> Unit)? = null,
+    onTripleTapPress: ((Offset) -> Unit)? = null,
 ) {
     awaitEachGesture {
         val touchesCounter = ClicksCounter(viewConfiguration, clicksSlop = 50.dp.toPx())
@@ -240,15 +240,15 @@ internal suspend fun PointerInputScope.detectRepeatingTapGestures(
                 }
 
                 2 -> {
-                    if (onDoubleTap != null) {
-                        onDoubleTap(downChange.position)
+                    if (onDoubleTapPress != null) {
+                        onDoubleTapPress(downChange.position)
                         downChange.consume()
                     }
                 }
 
                 else -> {
-                    if (onTripleTap != null) {
-                        onTripleTap(downChange.position)
+                    if (onTripleTapPress != null) {
+                        onTripleTapPress(downChange.position)
                         downChange.consume()
                     }
                 }
