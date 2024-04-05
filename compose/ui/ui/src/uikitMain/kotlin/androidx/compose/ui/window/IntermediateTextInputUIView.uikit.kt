@@ -99,19 +99,24 @@ internal class IntermediateTextInputUIView(
     override fun canBecomeFirstResponder() = true
 
     override fun pressesBegan(presses: Set<*>, withEvent: UIPressesEvent?) {
+        println("pressesBegan")
         handleUIViewPressesBegan(keyboardEventHandler, presses, withEvent)
         super.pressesBegan(presses, withEvent)
     }
 
     override fun pressesEnded(presses: Set<*>, withEvent: UIPressesEvent?) {
+        println("pressesEnded")
         handleUIViewPressesEnded(keyboardEventHandler, presses, withEvent)
         super.pressesEnded(presses, withEvent)
     }
 
     override fun hitTest(point: CValue<CGPoint>, withEvent: UIEvent?): UIView? {
+        println("hitTest")
         return if (input == null) {
+            println("input null")
             null
         } else {
+            println("input EXIST !?")
             super.hitTest(point, withEvent)
         }
     }
@@ -121,6 +126,7 @@ internal class IntermediateTextInputUIView(
      * https://developer.apple.com/documentation/uikit/uikeyinput/1614457-hastext
      */
     override fun hasText(): Boolean {
+//        println("hasText")
         return input?.hasText() ?: false
     }
 
@@ -131,6 +137,7 @@ internal class IntermediateTextInputUIView(
      * @param text A string object representing the character typed on the system keyboard.
      */
     override fun insertText(text: String) {
+//        println("insertText")
         input?.insertText(text)
     }
 
@@ -140,14 +147,17 @@ internal class IntermediateTextInputUIView(
      * https://developer.apple.com/documentation/uikit/uikeyinput/1614572-deletebackward
      */
     override fun deleteBackward() {
+//        println("deleteBackward")
         input?.deleteBackward()
     }
 
     override fun inputDelegate(): UITextInputDelegateProtocol? {
+        println("inputDelegate")
         return _inputDelegate
     }
 
     override fun setInputDelegate(inputDelegate: UITextInputDelegateProtocol?) {
+        println("setInputDelegate")
         _inputDelegate = inputDelegate
     }
 
@@ -158,6 +168,7 @@ internal class IntermediateTextInputUIView(
      * @return A substring of a document that falls within the specified range.
      */
     override fun textInRange(range: UITextRange): String? {
+//        println("textInRange")
         return input?.textInRange(range.toIntRange())
     }
 
@@ -168,10 +179,12 @@ internal class IntermediateTextInputUIView(
      * @param withText A string to replace the text in range.
      */
     override fun replaceRange(range: UITextRange, withText: String) {
+//        println("replaceRange")
         input?.replaceRange(range.toIntRange(), withText)
     }
 
     override fun setSelectedTextRange(selectedTextRange: UITextRange?) {
+//        println("setSelectedTextRange")
         input?.setSelectedTextRange(selectedTextRange?.toIntRange())
     }
 
@@ -183,6 +196,7 @@ internal class IntermediateTextInputUIView(
      * https://developer.apple.com/documentation/uikit/uitextinput/1614541-selectedtextrange
      */
     override fun selectedTextRange(): UITextRange? {
+//        println("selectedTextRange")
         return input?.getSelectedTextRange()?.toUITextRange()
     }
 
@@ -195,14 +209,17 @@ internal class IntermediateTextInputUIView(
      * https://developer.apple.com/documentation/uikit/uitextinput/1614489-markedtextrange
      */
     override fun markedTextRange(): UITextRange? {
+//        println("markedTextRange")
         return input?.markedTextRange()?.toUITextRange()
     }
 
     override fun setMarkedTextStyle(markedTextStyle: Map<Any?, *>?) {
+//        println("setMarkedTextStyle")
         // do nothing
     }
 
     override fun markedTextStyle(): Map<Any?, *>? {
+//        println("markedTextStyle")
         return null
     }
 
@@ -216,6 +233,7 @@ internal class IntermediateTextInputUIView(
      * This range is always relative to markedText.
      */
     override fun setMarkedText(markedText: String?, selectedRange: CValue<NSRange>) {
+//        println("setMarkedText")
         val (locationRelative, lengthRelative) = selectedRange.useContents {
             location.toInt() to length.toInt()
         }
@@ -229,10 +247,12 @@ internal class IntermediateTextInputUIView(
      * https://developer.apple.com/documentation/uikit/uitextinput/1614512-unmarktext
      */
     override fun unmarkText() {
+//        println("unmarkText")
         input?.unmarkText()
     }
 
     override fun beginningOfDocument(): UITextPosition {
+        println("beginningOfDocument")
         return IntermediateTextPosition(0)
     }
 
@@ -241,6 +261,7 @@ internal class IntermediateTextInputUIView(
      * https://developer.apple.com/documentation/uikit/uitextinput/1614555-endofdocument
      */
     override fun endOfDocument(): UITextPosition {
+        println("endOfDocument")
         return IntermediateTextPosition(input?.endOfDocument() ?: 0)
     }
 
@@ -251,6 +272,7 @@ internal class IntermediateTextInputUIView(
         fromPosition: UITextPosition,
         toPosition: UITextPosition
     ): UITextRange? {
+//        println("textRangeFromPosition")
         val from = (fromPosition as? IntermediateTextPosition)?.position ?: 0
         val to = (toPosition as? IntermediateTextPosition)?.position ?: 0
         return IntermediateTextRange(
@@ -269,6 +291,7 @@ internal class IntermediateTextInputUIView(
         position: UITextPosition,
         offset: NSInteger
     ): UITextPosition? {
+//        println("positionFromPosition")
         val p = (position as? IntermediateTextPosition)?.position ?: return null
         val endOfDocument = input?.endOfDocument()
         return if (endOfDocument != null) {
@@ -284,6 +307,7 @@ internal class IntermediateTextInputUIView(
         inDirection: UITextLayoutDirection,
         offset: NSInteger
     ): UITextPosition? {
+//        println("positionFromPosition inDirection")
         return when (inDirection) {
             UITextLayoutDirectionLeft, UITextLayoutDirectionUp -> {
                 positionFromPosition(position, -offset)
@@ -300,6 +324,7 @@ internal class IntermediateTextInputUIView(
         position: UITextPosition,
         toPosition: UITextPosition
     ): NSComparisonResult {
+//        println("comparePosition")
         val from = (position as? IntermediateTextPosition)?.position ?: 0
         val to = (toPosition as? IntermediateTextPosition)?.position ?: 0
         val result = if (from < to) {
@@ -313,6 +338,7 @@ internal class IntermediateTextInputUIView(
     }
 
     override fun offsetFromPosition(from: UITextPosition, toPosition: UITextPosition): NSInteger {
+//        println("offsetFromPosition")
         if (from !is IntermediateTextPosition) {
             error("from !is IntermediateTextPosition")
         }
@@ -339,7 +365,7 @@ internal class IntermediateTextInputUIView(
         inDirection: UITextLayoutDirection
     ): UITextRange? {
         if (position !is IntermediateTextPosition) {
-            error("position !is IntermediateTextPosition")
+//            error("position !is IntermediateTextPosition")
         }
         TODO("characterRangeByExtendingPosition, inDirection: ${inDirection.directionToStr()}")
     }
@@ -375,7 +401,10 @@ internal class IntermediateTextInputUIView(
         }
     }
 
-    override fun selectionRectsForRange(range: UITextRange): List<*> = listOf<UITextSelectionRect>()
+    override fun selectionRectsForRange(range: UITextRange): List<*> {
+//        println("selectionRectsForRange")
+        return listOf<UITextSelectionRect>()
+    }
     override fun closestPositionToPoint(point: CValue<CGPoint>): UITextPosition? = null
     override fun closestPositionToPoint(
         point: CValue<CGPoint>,
@@ -400,7 +429,7 @@ internal class IntermediateTextInputUIView(
         withinRange: UITextRange
     ): NSInteger {
         if (position !is IntermediateTextPosition) {
-            error("position !is IntermediateTextPosition")
+//            error("position !is IntermediateTextPosition")
         }
         TODO("characterOffsetOfPosition")
     }
@@ -454,6 +483,7 @@ internal class IntermediateTextInputUIView(
      * Call when something changes in text data
      */
     fun selectionWillChange() {
+//        println("selectionWillChange")
         _inputDelegate?.selectionWillChange(this)
     }
 
@@ -461,26 +491,39 @@ internal class IntermediateTextInputUIView(
      * Call when something changes in text data
      */
     fun selectionDidChange() {
+//        println("selectionDidChange")
         _inputDelegate?.selectionDidChange(this)
     }
 
     override fun isUserInteractionEnabled(): Boolean = false // disable clicks
 
     override fun canPerformAction(action: COpaquePointer?, withSender: Any?): Boolean {
+        println("canPerformAction")
         return when (action) {
-            NSSelectorFromString(UIResponderStandardEditActionsProtocol::copy.name + ":") ->
+            NSSelectorFromString(UIResponderStandardEditActionsProtocol::copy.name + ":") -> {
+                println("selector for copy:")
                 _currentTextMenuActions?.copy != null
+            }
 
-            NSSelectorFromString(UIResponderStandardEditActionsProtocol::cut.name + ":") ->
+            NSSelectorFromString(UIResponderStandardEditActionsProtocol::cut.name + ":") -> {
+                println("selector for cut:")
                 _currentTextMenuActions?.cut != null
+            }
 
-            NSSelectorFromString(UIResponderStandardEditActionsProtocol::paste.name + ":") ->
+            NSSelectorFromString(UIResponderStandardEditActionsProtocol::paste.name + ":") -> {
+                println("selector for paste:")
                 _currentTextMenuActions?.paste != null
+            }
 
-            NSSelectorFromString(UIResponderStandardEditActionsProtocol::selectAll.name + ":") ->
+            NSSelectorFromString(UIResponderStandardEditActionsProtocol::selectAll.name + ":") -> {
+                println("selector for selectAll:")
                 _currentTextMenuActions?.selectAll != null
+            }
 
-            else -> false
+            else -> {
+                println("Other selector has been tried to call")
+                false
+            }
         }
     }
 
@@ -502,12 +545,19 @@ internal class IntermediateTextInputUIView(
      * @param textActions - available (not null) actions in text menu
      */
     fun showTextMenu(targetRect: org.jetbrains.skia.Rect, textActions: TextActions) {
+        println("showTextMenu")
         val cgRect = CGRectMake(
             x = targetRect.left.toDouble(),
             y = targetRect.top.toDouble(),
             width = targetRect.width.toDouble(),
             height = targetRect.height.toDouble()
         )
+        bounds.useContents {
+            println("=== BOUNDS: origin = (${this.origin.x}, ${this.origin.y}), size = (${this.size.width}, ${this.size.height})")
+        }
+        cgRect.useContents {
+            println("=== CGRECT: origin = (${this.origin.x}, ${this.origin.y}), size = (${this.size.width}, ${this.size.height})")
+        }
         val isTargetVisible = CGRectIntersectsRect(bounds, cgRect)
 
         if (isTargetVisible) {
@@ -528,6 +578,7 @@ internal class IntermediateTextInputUIView(
     }
 
     fun hideTextMenu() {
+        println("hideTextMenu")
         cancelContextMenuUpdate()
 
         _currentTextMenuActions = null
@@ -536,6 +587,7 @@ internal class IntermediateTextInputUIView(
     }
 
     fun isTextMenuShown(): Boolean {
+        println("isTextMenuShown")
         return _currentTextMenuActions != null
     }
 

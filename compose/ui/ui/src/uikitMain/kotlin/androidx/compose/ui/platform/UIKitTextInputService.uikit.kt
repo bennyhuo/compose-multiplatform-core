@@ -32,6 +32,7 @@ import kotlinx.coroutines.launch
 import org.jetbrains.skia.BreakIterator
 import org.jetbrains.skiko.SkikoKey
 import org.jetbrains.skiko.SkikoKeyboardEventKind
+import platform.CoreGraphics.CGRectMake
 import platform.UIKit.*
 
 internal class UIKitTextInputService(
@@ -103,12 +104,12 @@ internal class UIKitTextInputService(
         onEditCommand: (List<EditCommand>) -> Unit,
         onImeActionPerformed: (ImeAction) -> Unit
     ) {
-        currentInput = CurrentInput(value, onEditCommand)
-        _tempCurrentInputSession = EditProcessor().apply {
-            reset(value, null)
-        }
-        currentImeOptions = imeOptions
-        currentImeActionHandler = onImeActionPerformed
+//        currentInput = CurrentInput(value, onEditCommand)
+//        _tempCurrentInputSession = EditProcessor().apply {
+//            reset(value, null)
+//        }
+//        currentImeOptions = imeOptions
+//        currentImeActionHandler = onImeActionPerformed
 
         textUIView?.removeFromSuperview()
         textUIView = IntermediateTextInputUIView(
@@ -121,8 +122,8 @@ internal class UIKitTextInputService(
                 getConstraintsToFillParent(it, rootView)
             )
         }
-        textUIView?.input = createSkikoInput(value)
-        textUIView?.inputTraits = getUITextInputTraits(imeOptions)
+//        textUIView?.input = createSkikoInput(value)
+//        textUIView?.inputTraits = getUITextInputTraits(imeOptions)
 
         showSoftwareKeyboard()
     }
@@ -162,25 +163,25 @@ internal class UIKitTextInputService(
         val selectionChanged =
             textChanged || internalOldValue == null || internalOldValue.selection != newValue.selection
         if (textChanged) {
-            textUIView?.textWillChange()
+//            textUIView?.textWillChange()
         }
         if (selectionChanged) {
-            textUIView?.selectionWillChange()
+//            textUIView?.selectionWillChange()
         }
-        _tempCurrentInputSession?.reset(newValue, null)
-        currentInput?.let { input ->
-            input.value = newValue
-            _tempCursorPos = null
-        }
+//        _tempCurrentInputSession?.reset(newValue, null)
+//        currentInput?.let { input ->
+//            input.value = newValue
+//            _tempCursorPos = null
+//        }
         if (textChanged) {
-            textUIView?.textDidChange()
+//            textUIView?.textDidChange()
         }
         if (selectionChanged) {
-            textUIView?.selectionDidChange()
+//            textUIView?.selectionDidChange()
         }
         if (textChanged || selectionChanged) {
-            updateView()
-            textUIView?.reloadInputViews()
+//            updateView()
+//            textUIView?.reloadInputViews()
         }
     }
 
@@ -272,24 +273,67 @@ internal class UIKitTextInputService(
         onCutRequested: (() -> Unit)?,
         onSelectAllRequested: (() -> Unit)?
     ) {
-        textUIView?.let {
-            val skiaRect = with(densityProvider()) {
-                org.jetbrains.skia.Rect.makeLTRB(
-                    l = rect.left / density,
-                    t = rect.top / density,
-                    r = rect.right / density,
-                    b = rect.bottom / density,
+        if (textUIView != null ) {
+            textUIView?.let {
+                val skiaRect = with(densityProvider()) {
+                    org.jetbrains.skia.Rect.makeLTRB(
+                        l = rect.left / density,
+                        t = rect.top / density,
+                        r = rect.right / density,
+                        b = rect.bottom / density,
+                    )
+                }
+                it.showTextMenu(
+                    targetRect = skiaRect,
+                    textActions = object : TextActions {
+                        override val copy: (() -> Unit)? = onCopyRequested
+                        override val cut: (() -> Unit)? = onCutRequested
+                        override val paste: (() -> Unit)? = onPasteRequested
+                        override val selectAll: (() -> Unit)? = onSelectAllRequested
+                    }
                 )
             }
-            it.showTextMenu(
-                targetRect = skiaRect,
-                textActions = object : TextActions {
-                    override val copy: (() -> Unit)? = onCopyRequested
-                    override val cut: (() -> Unit)? = onCutRequested
-                    override val paste: (() -> Unit)? = onPasteRequested
-                    override val selectAll: (() -> Unit)? = onSelectAllRequested
+        } else {
+            textUIView?.removeFromSuperview()
+            textUIView = IntermediateTextInputUIView(
+                keyboardEventHandler = keyboardEventHandler,
+                viewConfiguration = viewConfiguration
+            ).also {
+                rootView.addSubview(it)
+                it.translatesAutoresizingMaskIntoConstraints = false
+                NSLayoutConstraint.activateConstraints(
+                    getConstraintsToFillParent(it, rootView)
+                )
+            }
+
+            updateView()
+            rootView.layoutIfNeeded()
+            rootView.reloadInputViews()
+            textUIView?.reloadInputViews()
+
+            textUIView?.let {
+                val skiaRect = with(densityProvider()) {
+                    org.jetbrains.skia.Rect.makeLTRB(
+                        l = rect.left / density,
+                        t = rect.top / density,
+                        r = rect.right / density,
+                        b = rect.bottom / density,
+                    )
                 }
-            )
+                println("onCopyRequested = ${onCopyRequested}, onCutRequested = ${onCutRequested}, onPasteRequested = ${onPasteRequested}, onSelectAllRequested = ${onSelectAllRequested}")
+
+                it.showTextMenu(
+                    targetRect = skiaRect,
+                    textActions = object : TextActions {
+                        override val copy: (() -> Unit)? = onCopyRequested
+                        override val cut: (() -> Unit)? = onCutRequested
+                        override val paste: (() -> Unit)? = onPasteRequested
+                        override val selectAll: (() -> Unit)? = onSelectAllRequested
+                    }
+                )
+            }
+
+
         }
     }
 
@@ -298,6 +342,10 @@ internal class UIKitTextInputService(
      */
     override fun hide() {
         textUIView?.hideTextMenu()
+        if ((textUIView != null) && (currentInput == null)) {
+            textUIView?.removeFromSuperview()
+            textUIView = null
+        }
     }
 
     override val status: TextToolbarStatus
