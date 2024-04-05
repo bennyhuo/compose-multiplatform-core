@@ -78,7 +78,9 @@ internal class ComposeSceneKeyboardOffsetManager(
         KeyboardVisibilityListener.removeObserver(this)
     }
 
-    //invisible view to track system keyboard animation
+    /**
+     * Invisible view to track system keyboard animation
+     */
     private val animationView: UIView by lazy {
         UIView(CGRectZero.readValue()).apply {
             hidden = true

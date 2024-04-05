@@ -385,7 +385,7 @@ internal class ComposeContainer(
                 configuration = configuration,
                 focusStack = if (focusable) focusStack else null,
                 windowContext = windowContext,
-                compositionContext = compositionContext
+                compositionContext = compositionContext,
             )
     }
 }
