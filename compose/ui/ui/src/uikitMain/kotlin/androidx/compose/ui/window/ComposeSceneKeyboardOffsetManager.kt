@@ -17,13 +17,12 @@
 package androidx.compose.ui.window
 
 import androidx.compose.runtime.ExperimentalComposeApi
-import androidx.compose.runtime.InternalComposeApi
 import androidx.compose.runtime.MutableState
 import androidx.compose.ui.scene.ComposeSceneMediator
 import androidx.compose.ui.uikit.ComposeUIViewControllerConfiguration
 import androidx.compose.ui.uikit.OnFocusBehavior
-import androidx.compose.ui.uikit.SoftwareKeyboardState
-import androidx.compose.ui.unit.Density
+import androidx.compose.ui.uikit.systemDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toDpRect
 import kotlin.math.max
@@ -33,7 +32,6 @@ import kotlinx.cinterop.CValue
 import kotlinx.cinterop.ObjCAction
 import kotlinx.cinterop.readValue
 import kotlinx.cinterop.useContents
-import platform.CoreGraphics.CGAffineTransformMakeTranslation
 import platform.CoreGraphics.CGPointMake
 import platform.CoreGraphics.CGRect
 import platform.CoreGraphics.CGRectGetMinY
@@ -52,13 +50,12 @@ import platform.darwin.dispatch_async
 import platform.darwin.dispatch_get_main_queue
 import platform.darwin.sel_registerName
 
-@OptIn(InternalComposeApi::class)
 internal class ComposeSceneKeyboardOffsetManager(
     private val configuration: ComposeUIViewControllerConfiguration,
-    private val softwareKeyboardState: MutableState<SoftwareKeyboardState>,
+    private val keyboardOverlapHeightState: MutableState<Dp>,
     private val viewProvider: () -> UIView,
-    private val densityProvider: () -> Density,
-    private val composeSceneMediatorProvider: () -> ComposeSceneMediator?
+    private val composeSceneMediatorProvider: () -> ComposeSceneMediator?,
+    private val onComposeSceneOffsetChanged: (Double) -> Unit,
 ) : KeyboardVisibilityObserver {
 
     val view get() = viewProvider()
@@ -174,16 +171,7 @@ internal class ComposeSceneKeyboardOffsetManager(
             val targetBottomOffset = calcFocusedBottomOffsetY(currentOverlapHeight)
             viewBottomOffset += (targetBottomOffset - viewBottomOffset) * progress
 
-            val textSelectionHandlersOffset = if (configuration.platformLayers) {
-                viewBottomOffset.toFloat()
-            } else {
-                0f
-            }
-
-            softwareKeyboardState.value = SoftwareKeyboardState(
-                imeBottomInset = currentOverlapHeight.dp,
-                textSelectionHandlersOffset = textSelectionHandlersOffset.dp
-            )
+            keyboardOverlapHeightState.value = currentOverlapHeight.dp
         }
 
         fun completeAnimation() {
@@ -245,7 +233,7 @@ internal class ComposeSceneKeyboardOffsetManager(
         }
         val mediator = composeSceneMediatorProvider()
         val focusedRect =
-            mediator?.focusManager?.getFocusRect()?.toDpRect(densityProvider()) ?: return 0.0
+            mediator?.focusManager?.getFocusRect()?.toDpRect(view.systemDensity) ?: return 0.0
 
         val viewHeight = view.frame.useContents { size.height }
 
@@ -271,6 +259,6 @@ internal class ComposeSceneKeyboardOffsetManager(
     private var viewBottomOffset: Double = 0.0
         set(newValue) {
             field = newValue
-            view.layer.setAffineTransform(CGAffineTransformMakeTranslation(0.0, -newValue))
+            onComposeSceneOffsetChanged(newValue)
         }
 }

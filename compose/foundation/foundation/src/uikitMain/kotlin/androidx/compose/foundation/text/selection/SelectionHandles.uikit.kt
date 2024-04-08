@@ -36,7 +36,6 @@ import androidx.compose.ui.geometry.takeOrElse
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.ResolvedTextDirection
-import androidx.compose.ui.uikit.LocalSoftwareKeyboardState
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
@@ -151,7 +150,6 @@ internal fun Modifier.drawSelectionHandle(
     }
 }
 
-@OptIn(InternalComposeApi::class)
 @Composable
 internal fun HandlePopup(
     offset: Offset,
@@ -159,13 +157,8 @@ internal fun HandlePopup(
     handleReferencePoint: HandleReferencePoint,
     content: @Composable () -> Unit
 ) {
-    val cursorOffset = with(LocalDensity.current) {
-        LocalSoftwareKeyboardState.current.textSelectionHandlersOffset.toPx()
-    }
-    val handleOffset = offset.copy(y = offset.y - cursorOffset)
-
-    val popupPositionProvider = remember(handleReferencePoint, positionProvider, handleOffset) {
-        HandlePositionProvider(handleReferencePoint, positionProvider, handleOffset)
+    val popupPositionProvider = remember(handleReferencePoint, positionProvider, offset) {
+        HandlePositionProvider(handleReferencePoint, positionProvider, offset)
     }
     Popup(
         popupPositionProvider = popupPositionProvider,

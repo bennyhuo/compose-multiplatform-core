@@ -24,7 +24,7 @@ import androidx.compose.ui.platform.LocalSafeArea
 import androidx.compose.ui.platform.PlatformInsets
 import androidx.compose.ui.uikit.InterfaceOrientation
 import androidx.compose.ui.uikit.LocalInterfaceOrientation
-import androidx.compose.ui.uikit.LocalSoftwareKeyboardState
+import androidx.compose.ui.uikit.LocalKeyboardOverlapHeight
 
 private val ZeroInsets = WindowInsets(0, 0, 0, 0)
 
@@ -79,7 +79,7 @@ actual val WindowInsets.Companion.displayCutout: WindowInsets
 actual val WindowInsets.Companion.ime: WindowInsets
     @Composable
     @OptIn(InternalComposeApi::class)
-    get() = WindowInsets(bottom = LocalSoftwareKeyboardState.current.imeBottomInset)
+    get() = WindowInsets(bottom = LocalKeyboardOverlapHeight.current)
 
 /**
  * These insets represent the space where system gestures have priority over application gestures.

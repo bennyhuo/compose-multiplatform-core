@@ -50,10 +50,10 @@ import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.semantics.SemanticsOwner
 import androidx.compose.ui.uikit.ComposeUIViewControllerConfiguration
-import androidx.compose.ui.uikit.LocalSoftwareKeyboardState
-import androidx.compose.ui.uikit.SoftwareKeyboardState
+import androidx.compose.ui.uikit.LocalKeyboardOverlapHeight
 import androidx.compose.ui.uikit.systemDensity
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.asCGRect
@@ -82,6 +82,7 @@ import org.jetbrains.skiko.SkikoKeyboardEvent
 import org.jetbrains.skiko.SkikoKeyboardEventKind
 import platform.CoreGraphics.CGAffineTransformIdentity
 import platform.CoreGraphics.CGAffineTransformInvert
+import platform.CoreGraphics.CGAffineTransformMakeTranslation
 import platform.CoreGraphics.CGPoint
 import platform.CoreGraphics.CGRect
 import platform.CoreGraphics.CGRectMake
@@ -212,10 +213,7 @@ internal class ComposeSceneMediator(
         coroutineContext: CoroutineContext
     ) -> ComposeScene
 ) {
-    @OptIn(InternalComposeApi::class)
-    private val softwareKeyboardState = mutableStateOf(
-        SoftwareKeyboardState.Initial
-    )
+    private val keyboardOverlapHeightState: MutableState<Dp> = mutableStateOf(0f.dp)
     private var _layout: SceneLayout = SceneLayout.Undefined
     private var constraints: List<NSLayoutConstraint> = emptyList()
         set(value) {
@@ -235,7 +233,7 @@ internal class ComposeSceneMediator(
                 }
         }
 
-    private val scene: ComposeScene by lazy {
+    internal val scene: ComposeScene by lazy {
         composeSceneFactory(
             ::onComposeSceneInvalidate,
             IOSPlatformContext(),
@@ -330,14 +328,16 @@ internal class ComposeSceneMediator(
         )
     }
 
-    @OptIn(InternalComposeApi::class)
     private val keyboardManager by lazy {
         ComposeSceneKeyboardOffsetManager(
             configuration = configuration,
-            softwareKeyboardState = softwareKeyboardState,
+            keyboardOverlapHeightState = keyboardOverlapHeightState,
             viewProvider = { rootView },
-            densityProvider = { rootView.systemDensity },
-            composeSceneMediatorProvider = { this }
+            composeSceneMediatorProvider = { this },
+            onComposeSceneOffsetChanged = { offset ->
+                rootView.layer.setAffineTransform(CGAffineTransformMakeTranslation(0.0, -offset))
+                scene.invalidatePositionInWindow()
+            }
         )
     }
 
@@ -495,7 +495,7 @@ internal class ComposeSceneMediator(
         CompositionLocalProvider(
             LocalUIKitInteropContext provides interopContext,
             LocalUIKitInteropContainer provides interopViewContainer,
-            LocalSoftwareKeyboardState provides softwareKeyboardState.value,
+            LocalKeyboardOverlapHeight provides keyboardOverlapHeightState.value,
             LocalSafeArea provides safeAreaState.value,
             LocalLayoutMargins provides layoutMarginsState.value,
             content = content
@@ -666,10 +666,10 @@ internal class ComposeSceneMediator(
         override val windowInfo: WindowInfo get() = windowContext.windowInfo
 
         override fun calculatePositionInWindow(localPosition: Offset): Offset =
-            windowContext.calculatePositionInWindow(container, localPosition)
+            windowContext.calculatePositionInWindow(rootView, localPosition)
 
         override fun calculateLocalPosition(positionInWindow: Offset): Offset =
-            windowContext.calculateLocalPosition(container, positionInWindow)
+            windowContext.calculateLocalPosition(rootView, positionInWindow)
 
         override val measureDrawLayerBounds get() = this@ComposeSceneMediator.measureDrawLayerBounds
         override val viewConfiguration get() = this@ComposeSceneMediator.viewConfiguration

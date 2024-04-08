@@ -20,8 +20,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.InternalComposeApi
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.uikit.LocalSoftwareKeyboardState
-import androidx.compose.ui.uikit.SoftwareKeyboardState
+import androidx.compose.ui.uikit.LocalKeyboardOverlapHeight
+import androidx.compose.ui.unit.dp
 
 /**
  * Composition local for SafeArea of ComposeUIViewController
@@ -41,9 +41,7 @@ private object SafeAreaInsetsConfig : InsetsConfig {
         @Composable get() = LocalSafeArea.current
 
     override val ime: PlatformInsets
-        @Composable get() = PlatformInsets(
-            bottom = LocalSoftwareKeyboardState.current.imeBottomInset
-        )
+        @Composable get() = PlatformInsets(bottom = LocalKeyboardOverlapHeight.current)
 
     @Composable
     override fun excludeInsets(
@@ -53,11 +51,11 @@ private object SafeAreaInsetsConfig : InsetsConfig {
     ) {
         val safeArea = LocalSafeArea.current
         val layoutMargins = LocalLayoutMargins.current
-        val softwareKeyboardState = LocalSoftwareKeyboardState.current
+        val keyboardOverlapHeight = LocalKeyboardOverlapHeight.current
         CompositionLocalProvider(
             LocalSafeArea provides if (safeInsets) PlatformInsets() else safeArea,
             LocalLayoutMargins provides if (safeInsets) layoutMargins.exclude(safeArea) else layoutMargins,
-            LocalSoftwareKeyboardState provides if (ime) SoftwareKeyboardState.Initial else softwareKeyboardState,
+            LocalKeyboardOverlapHeight provides if (ime) 0f.dp else keyboardOverlapHeight,
             content = content
         )
     }
