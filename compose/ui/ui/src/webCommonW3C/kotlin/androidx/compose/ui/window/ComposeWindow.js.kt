@@ -69,7 +69,7 @@ import org.w3c.dom.TouchEvent
 private val actualDensity
     get() = window.devicePixelRatio
 
-private interface ComposeWindowState {
+internal interface ComposeWindowState {
     fun init() {}
     fun sizeFlow(): Flow<IntSize>
 
@@ -93,7 +93,7 @@ private interface ComposeWindowState {
     }
 }
 
-private class DefaultWindowState(private val viewportContainer: Element) : ComposeWindowState {
+internal class DefaultWindowState(private val viewportContainer: Element) : ComposeWindowState {
     private val channel = Channel<IntSize>(CONFLATED)
 
     override val globalEvents = EventTargetListener(window)
@@ -131,7 +131,7 @@ private class DefaultWindowState(private val viewportContainer: Element) : Compo
 }
 
 @OptIn(InternalComposeApi::class)
-private class ComposeWindow(
+internal class ComposeWindow(
     private val canvas: HTMLCanvasElement,
     content: @Composable () -> Unit,
     private val state: ComposeWindowState
@@ -255,8 +255,6 @@ private class ComposeWindow(
         state.globalEvents.addDisposableEvent("blur") {
             lifecycleOwner.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
         }
-
-        lifecycleOwner.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
     }
 
     init {
