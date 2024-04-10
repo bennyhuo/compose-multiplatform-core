@@ -347,6 +347,9 @@ class AndroidXImplPlugin @Inject constructor(val componentFactory: SoftwareCompo
                     kotlinCompilerArgs += "-Xjvm-default=all"
                 }
                 task.kotlinOptions.freeCompilerArgs += kotlinCompilerArgs
+
+                // Suppress a warning that 'expect'/'actual' classes are in Beta.
+                task.kotlinOptions.freeCompilerArgs += "-Xexpect-actual-classes"
             }
 
             val isAndroidProject = project.plugins.hasPlugin(LibraryPlugin::class.java) ||
@@ -373,6 +376,7 @@ class AndroidXImplPlugin @Inject constructor(val componentFactory: SoftwareCompo
             project.configureSourceJarForMultiplatform()
             project.configureLintForMultiplatform(extension)
         }
+        project.addToProjectMap(extension)
     }
 
     @Suppress("UnstableApiUsage") // AGP DSL APIs

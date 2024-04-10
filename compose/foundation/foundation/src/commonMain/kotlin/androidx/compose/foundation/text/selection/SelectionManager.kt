@@ -18,8 +18,6 @@ package androidx.compose.foundation.text.selection
 
 import androidx.annotation.VisibleForTesting
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.text.Handle
 import androidx.compose.foundation.text.TextDragObserver
 import androidx.compose.foundation.text.selection.Selection.AnchorInfo
@@ -31,6 +29,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.FocusState
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
@@ -41,7 +40,12 @@ import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.pointer.PointerInputScope
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
+import androidx.compose.ui.input.pointer.PointerEvent
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.changedToUp
+import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInWindow
@@ -54,6 +58,7 @@ import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.util.fastAll
 import androidx.compose.ui.util.fastAny
 import androidx.compose.ui.util.fastFold
 import androidx.compose.ui.util.fastForEach
@@ -98,7 +103,19 @@ internal class SelectionManager(private val selectionRegistrar: SelectionRegistr
      * change. The expectation is that this callback will end up causing `setSelection` to get
      * called. This is what makes this a "controlled component".
      */
-    var onSelectionChange: (Selection?) -> Unit = {}
+    var onSelectionChange: (Selection?) -> Unit = { selection = it }
+        set(newOnSelectionChange) {
+            // Wrap the given lambda with one that sets the selection immediately.
+            // The onSelectionChange loop requires a composition to happen for the selection
+            // to be updated, so we want to shorten that loop for gesture use cases where
+            // multiple selection changing events can be acted on within a single composition
+            // loop. Previous selection is used as part of that loop so keeping it up to date
+            // is important.
+            field = { newSelection ->
+                selection = newSelection
+                newOnSelectionChange(newSelection)
+            }
+        }
 
     /**
      * [HapticFeedback] handle to perform haptic feedback.
@@ -121,9 +138,24 @@ internal class SelectionManager(private val selectionRegistrar: SelectionRegistr
     var focusRequester: FocusRequester = FocusRequester()
 
     /**
+     * Current focus state.
+     */
+    var focusState: FocusState? by mutableStateOf(null)
+
+    /**
+     * Return true if the corresponding SelectionContainer has a child that is focused.
+     */
+    val hasFocus get() = focusState?.hasFocus ?: false
+
+    /**
      * Return true if the corresponding SelectionContainer is focused.
      */
-    var hasFocus: Boolean by mutableStateOf(false)
+    private val isContainerFocused get() = focusState?.isFocused ?: false
+
+    /**
+     * Return true if dragging gesture is currently in process.
+     */
+    private val isDraggingInProgress get() = draggingHandle != null
 
     /**
      * Modifier for selection container.
@@ -134,15 +166,15 @@ internal class SelectionManager(private val selectionRegistrar: SelectionRegistr
             .onGloballyPositioned { containerLayoutCoordinates = it }
             .focusRequester(focusRequester)
             .onFocusChanged { focusState ->
-                if (!focusState.isFocused && hasFocus) {
+                if (!focusState.hasFocus && hasFocus) {
                     onRelease()
                 }
-                hasFocus = focusState.isFocused
+                this.focusState = focusState
             }
             .focusable()
             .updateSelectionTouchMode { isInTouchMode = it }
             .onKeyEvent {
-                if (isCopyKeyEvent(it)) {
+                if (!skipCopyKeyEvent && isCopyKeyEvent(it)) {
                     copy()
                     true
                 } else {
@@ -236,7 +268,7 @@ internal class SelectionManager(private val selectionRegistrar: SelectionRegistr
         private set
 
     private val shouldShowMagnifier
-        get() = draggingHandle != null && isInTouchMode && !isTriviallyCollapsedSelection()
+        get() = isDraggingInProgress && isInTouchMode && !isTriviallyCollapsedSelection()
 
     @VisibleForTesting
     internal var previousSelectionLayout: SelectionLayout? = null
@@ -664,20 +696,27 @@ internal class SelectionManager(private val selectionRegistrar: SelectionRegistr
         override fun onCancel() = done()
     }
 
-    /**
-     * Detect tap without consuming the up event.
-     */
-    private suspend fun PointerInputScope.detectNonConsumingTap(onTap: (Offset) -> Unit) {
-        awaitEachGesture {
-            waitForUpOrCancellation()?.let {
-                onTap(it.position)
+    private fun Modifier.onClearSelectionRequested(block: () -> Unit): Modifier =
+        pointerInput(Unit) {
+            awaitPointerEventScope {
+                while (true) {
+                    awaitPointerEventWhereAllChanges(PointerEventPass.Initial) {
+                        it.changedToUpIgnoreConsumed()
+                    }?.let {
+                        if (!isContainerFocused && !isDraggingInProgress) {
+                            block()
+                        }
+                    }
+                    awaitPointerEventWhereAllChanges(PointerEventPass.Main) {
+                        it.changedToUp()
+                    }?.let {
+                        if (isContainerFocused) {
+                            block()
+                        }
+                    }
+                }
             }
         }
-    }
-
-    private fun Modifier.onClearSelectionRequested(block: () -> Unit): Modifier {
-        return if (hasFocus) pointerInput(Unit) { detectNonConsumingTap { block() } } else this
-    }
 
     private fun convertToContainerCoordinates(
         layoutCoordinates: LayoutCoordinates,
@@ -992,3 +1031,16 @@ internal fun LayoutCoordinates.visibleBounds(): Rect {
 
 internal fun Rect.containsInclusive(offset: Offset): Boolean =
     offset.x in left..right && offset.y in top..bottom
+
+/**
+ * Suspend until a [PointerEvent] is reported to the specified input [pass].
+ * Returns it if all changes match the given [predicate].
+ */
+private suspend fun AwaitPointerEventScope.awaitPointerEventWhereAllChanges(
+    pass: PointerEventPass = PointerEventPass.Main,
+    predicate: (PointerInputChange) -> Boolean,
+) = awaitPointerEvent(pass).takeIf { it.changes.fastAll(predicate) }
+
+
+// We skip `isCopyKeyEvent(it)` on web, because should handle browser 'copy' event
+internal expect val SelectionManager.skipCopyKeyEvent: Boolean

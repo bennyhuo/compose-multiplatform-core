@@ -16,23 +16,11 @@
 
 package androidx.compose.ui.window
 
-import androidx.compose.ui.toDpOffset
-import androidx.compose.ui.unit.DpOffset
 import kotlinx.cinterop.CValue
 import kotlinx.cinterop.readValue
-import kotlinx.cinterop.useContents
-import org.jetbrains.skiko.SkikoInputModifiers
-import org.jetbrains.skiko.SkikoKey
-import org.jetbrains.skiko.SkikoKeyboardEvent
-import org.jetbrains.skiko.SkikoKeyboardEventKind
 import platform.CoreGraphics.CGPoint
 import platform.CoreGraphics.CGRectZero
 import platform.UIKit.UIEvent
-import platform.UIKit.UIKeyModifierAlternate
-import platform.UIKit.UIKeyModifierCommand
-import platform.UIKit.UIKeyModifierControl
-import platform.UIKit.UIKeyModifierShift
-import platform.UIKit.UIPress
 import platform.UIKit.UIPressesEvent
 import platform.UIKit.UIView
 
@@ -44,7 +32,7 @@ internal class InteractionUIView(
     private var keyboardEventHandler: KeyboardEventHandler,
     private var touchesDelegate: Delegate,
     private var updateTouchesCount: (count: Int) -> Unit,
-    private var checkBounds: (point: DpOffset) -> Boolean,
+    private var inBounds: (CValue<CGPoint>) -> Boolean,
 ) : UIView(CGRectZero.readValue()) {
 
     interface Delegate {
@@ -70,12 +58,12 @@ internal class InteractionUIView(
     override fun canBecomeFirstResponder() = true
 
     override fun pressesBegan(presses: Set<*>, withEvent: UIPressesEvent?) {
-        handleUIViewPressesBegan(keyboardEventHandler, presses, withEvent)
+        keyboardEventHandler.pressesBegan(presses, withEvent)
         super.pressesBegan(presses, withEvent)
     }
 
     override fun pressesEnded(presses: Set<*>, withEvent: UIPressesEvent?) {
-        handleUIViewPressesEnded(keyboardEventHandler, presses, withEvent)
+        keyboardEventHandler.pressesEnded(presses, withEvent)
         super.pressesEnded(presses, withEvent)
     }
 
@@ -83,8 +71,7 @@ internal class InteractionUIView(
      * https://developer.apple.com/documentation/uikit/uiview/1622533-point
      */
     override fun pointInside(point: CValue<CGPoint>, withEvent: UIEvent?): Boolean {
-        val pointOffset = point.useContents { this.toDpOffset() }
-        return checkBounds(pointOffset) && touchesDelegate.pointInside(point, withEvent)
+        return inBounds(point) && touchesDelegate.pointInside(point, withEvent)
     }
 
     override fun touchesBegan(touches: Set<*>, withEvent: UIEvent?) {
@@ -135,73 +122,7 @@ internal class InteractionUIView(
             override fun onTouchesEvent(view: UIView, event: UIEvent, phase: UITouchesEventPhase) {}
         }
         updateTouchesCount = {}
-        checkBounds = { false }
-        keyboardEventHandler = object: KeyboardEventHandler {
-            override fun onKeyboardEvent(event: SkikoKeyboardEvent) {}
-        }
+        inBounds = { false }
+        keyboardEventHandler = KeyboardEventHandler.Empty
     }
-}
-
-internal fun handleUIViewPressesBegan(
-    keyboardEventHandler: KeyboardEventHandler,
-    presses: Set<*>,
-    withEvent: UIPressesEvent?
-) {
-    if (withEvent != null) {
-        for (press in withEvent.allPresses) {
-            if (press is UIPress) {
-                keyboardEventHandler.onKeyboardEvent(
-                    toSkikoKeyboardEvent(press, SkikoKeyboardEventKind.DOWN)
-                )
-            }
-        }
-    }
-}
-
-internal fun handleUIViewPressesEnded(
-    keyboardEventHandler: KeyboardEventHandler,
-    presses: Set<*>,
-    withEvent: UIPressesEvent?
-) {
-    if (withEvent != null) {
-        for (press in withEvent.allPresses) {
-            if (press is UIPress) {
-                keyboardEventHandler.onKeyboardEvent(
-                    toSkikoKeyboardEvent(press, SkikoKeyboardEventKind.UP)
-                )
-            }
-        }
-    }
-}
-
-private fun toSkikoKeyboardEvent(
-    event: UIPress,
-    kind: SkikoKeyboardEventKind
-): SkikoKeyboardEvent {
-    val timestamp = (event.timestamp * 1_000).toLong()
-    return SkikoKeyboardEvent(
-        SkikoKey.valueOf(event.key!!.keyCode),
-        toSkikoModifiers(event),
-        kind,
-        timestamp,
-        event
-    )
-}
-
-private fun toSkikoModifiers(event: UIPress): SkikoInputModifiers {
-    var result = 0
-    val modifiers = event.key!!.modifierFlags
-    if (modifiers and UIKeyModifierAlternate != 0L) {
-        result = result.or(SkikoInputModifiers.ALT.value)
-    }
-    if (modifiers and UIKeyModifierShift != 0L) {
-        result = result.or(SkikoInputModifiers.SHIFT.value)
-    }
-    if (modifiers and UIKeyModifierControl != 0L) {
-        result = result.or(SkikoInputModifiers.CONTROL.value)
-    }
-    if (modifiers and UIKeyModifierCommand != 0L) {
-        result = result.or(SkikoInputModifiers.META.value)
-    }
-    return SkikoInputModifiers(result)
 }

@@ -18,6 +18,7 @@ package androidx.compose.foundation.text.selection
 
 import androidx.compose.foundation.text.ContextMenuArea
 import androidx.compose.foundation.text.detectDownAndDragGesturesWithObserver
+import androidx.compose.foundation.text.rememberClipboardEventsHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -95,6 +96,11 @@ internal fun SelectionContainer(
     manager.onSelectionChange = onSelectionChange
     manager.selection = selection
 
+    rememberClipboardEventsHandler(
+        onCopy = { manager.getSelectedText()?.text },
+        isEnabled = manager.isNonEmptySelection()
+    )
+
     ContextMenuArea(manager) {
         CompositionLocalProvider(LocalSelectionRegistrar provides registrarImpl) {
             // Get the layout coordinates of the selection container. This is for hit test of
@@ -150,7 +156,7 @@ internal fun SelectionContainer(
     DisposableEffect(manager) {
         onDispose {
             manager.onRelease()
-            manager.hasFocus = false
+            manager.focusState = null
         }
     }
 }

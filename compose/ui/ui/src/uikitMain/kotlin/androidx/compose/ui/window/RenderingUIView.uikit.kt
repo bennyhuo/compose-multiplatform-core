@@ -19,9 +19,13 @@ package androidx.compose.ui.window
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.interop.UIKitInteropContext
 import androidx.compose.ui.interop.UIKitInteropTransaction
+import kotlin.math.floor
+import kotlin.math.roundToLong
 import kotlinx.cinterop.*
 import org.jetbrains.skia.Canvas
+import org.jetbrains.skiko.SkikoRenderDelegate
 import platform.CoreGraphics.*
 import platform.Foundation.*
 import platform.Metal.MTLCreateSystemDefaultDevice
@@ -31,7 +35,8 @@ import platform.QuartzCore.CAMetalLayer
 import platform.UIKit.*
 
 internal class RenderingUIView(
-    private val renderDelegate: Delegate,
+    private val interopContext: UIKitInteropContext,
+    private val renderDelegate: SkikoRenderDelegate,
 ) : UIView(
     frame = CGRectMake(
         x = 0.0,
@@ -40,12 +45,6 @@ internal class RenderingUIView(
         height = 1.0
     )
 ) {
-
-    interface Delegate {
-        fun retrieveInteropTransaction(): UIKitInteropTransaction
-        fun render(canvas: Canvas, targetTimestamp: NSTimeInterval)
-    }
-
     companion object : UIViewMeta() {
         override fun layerClass() = CAMetalLayer
     }
@@ -58,15 +57,17 @@ internal class RenderingUIView(
         MTLCreateSystemDefaultDevice()
             ?: throw IllegalStateException("Metal is not supported on this system")
     private val metalLayer: CAMetalLayer get() = layer as CAMetalLayer
+    private var _width: CGFloat = 0.0
+    private var _height: CGFloat = 0.0
     internal val redrawer: MetalRedrawer = MetalRedrawer(
         metalLayer,
         callbacks = object : MetalRedrawerCallbacks {
             override fun render(canvas: Canvas, targetTimestamp: NSTimeInterval) {
-                renderDelegate.render(canvas, targetTimestamp)
+                renderDelegate.onRender(canvas, _width.toInt(), _height.toInt(), targetTimestamp.toNanoSeconds())
             }
 
             override fun retrieveInteropTransaction(): UIKitInteropTransaction =
-                renderDelegate.retrieveInteropTransaction()
+                interopContext.retrieve()
         }
     )
 
@@ -123,8 +124,9 @@ internal class RenderingUIView(
         if (window == null || CGRectIsEmpty(bounds)) {
             return
         }
-        val scaledSize = bounds.useContents {
-            CGSizeMake(size.width * contentScaleFactor, size.height * contentScaleFactor)
+        bounds.useContents {
+            _width = size.width * contentScaleFactor
+            _height = size.height * contentScaleFactor
         }
 
         // If drawableSize is zero in any dimension it means that it's a first layout
@@ -134,7 +136,7 @@ internal class RenderingUIView(
             width == 0.0 || height == 0.0
         }
 
-        metalLayer.drawableSize = scaledSize
+        metalLayer.drawableSize = CGSizeMake(_width, _height)
 
         if (needsSynchronousDraw) {
             redrawer.drawSynchronously()
@@ -142,5 +144,15 @@ internal class RenderingUIView(
     }
 
     override fun canBecomeFirstResponder() = false
+}
 
+private fun NSTimeInterval.toNanoSeconds(): Long {
+    // The calculation is split in two instead of
+    // `(targetTimestamp * 1e9).toLong()`
+    // to avoid losing precision for fractional part
+    val integral = floor(this)
+    val fractional = this - integral
+    val secondsToNanos = 1_000_000_000L
+    val nanos = integral.roundToLong() * secondsToNanos + (fractional * 1e9).roundToLong()
+    return nanos
 }

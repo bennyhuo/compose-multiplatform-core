@@ -22,12 +22,16 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusManager
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.InputModeManager
 import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.node.LayoutNode
+import androidx.compose.ui.node.OwnedLayer
 import androidx.compose.ui.node.Owner
 import androidx.compose.ui.node.RootForTest
+import androidx.compose.ui.scene.ComposeScene
 import androidx.compose.ui.scene.MultiLayerComposeScene
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsOwner
@@ -56,6 +60,30 @@ interface PlatformContext {
      * @see MultiLayerComposeScene
      */
     val isWindowTransparent: Boolean get() = false
+
+    /**
+     * Returns the position relative to the containing window of the [localPosition],
+     * the position relative to the [ComposeScene]. If the [ComposeScene] is rotated, scaled,
+     * or otherwise transformed relative to the window, this will not be a simple translation.
+     */
+    fun calculatePositionInWindow(localPosition: Offset): Offset =
+        localPosition
+
+    /**
+     * Returns the position relative to the [ComposeScene] of the [positionInWindow],
+     * the position relative to the window. If the [ComposeScene] is rotated, scaled, or
+     * otherwise transformed relative to the window, this will not be a simple translation.
+     */
+    fun calculateLocalPosition(positionInWindow: Offset): Offset =
+        positionInWindow
+
+    /**
+     * Determines if [OwnedLayer] should measure bounds for all drawings.
+     * It's required to determine bounds of any graphics even if it was drawn out of measured
+     * layout bounds (for example shadows). It might be used to resize platform views based on
+     * such bounds.
+     */
+    val measureDrawLayerBounds: Boolean get() = false
 
     val viewConfiguration: ViewConfiguration get() = EmptyViewConfiguration
     val inputModeManager: InputModeManager
@@ -107,6 +135,15 @@ interface PlatformContext {
          * @see Owner.onSemanticsChange
          */
         fun onSemanticsChange(semanticsOwner: SemanticsOwner)
+
+        /**
+         * Callback method that is called when the position and/or size of the [LayoutNode] with
+         * the given semantics id changed.
+         *
+         * Note that the id, rather than the [LayoutNode] itself, is passed here because
+         * [LayoutNode] is an internal type, so it can't be exposed in a public method.
+         */
+        fun onLayoutChange(semanticsOwner: SemanticsOwner, semanticsNodeId: Int)
     }
 
     companion object {

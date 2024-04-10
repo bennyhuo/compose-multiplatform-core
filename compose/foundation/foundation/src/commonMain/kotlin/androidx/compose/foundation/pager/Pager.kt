@@ -597,7 +597,7 @@ private fun SnapLayoutInfoProvider(
         override fun calculateSnappingOffset(currentVelocity: Float): Float {
             val (lowerBoundOffset, upperBoundOffset) = searchForSnappingBounds()
 
-            val isForward = pagerState.isScrollingForward()
+            val isForward = pagerState.isScrollingForward(currentVelocity)
 
             debugLog { "isForward=$isForward" }
 
@@ -895,8 +895,8 @@ private class DefaultPagerNestedScrollConnection(
         available: Offset,
         source: NestedScrollSource
     ): Offset {
-        if (source == NestedScrollSource.Fling && available != Offset.Zero) {
-            throw CancellationException("")
+        if (source == NestedScrollSource.Fling && available.mainAxis() != 0f) {
+            throw CancellationException("End of scrollable area reached")
         }
         return Offset.Zero
     }
@@ -904,6 +904,9 @@ private class DefaultPagerNestedScrollConnection(
     override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
         return available.consumeOnOrientation(orientation)
     }
+
+    private fun Offset.mainAxis(): Float =
+        if (orientation == Orientation.Horizontal) this.x else this.y
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -956,7 +959,11 @@ private inline fun debugLog(generateMsg: () -> String) {
 }
 
 @OptIn(ExperimentalFoundationApi::class)
-private fun PagerState.isScrollingForward() = dragGestureDelta() < 0
+private fun PagerState.isScrollingForward(velocity: Float) = if (isNotGestureAction()) {
+    velocity
+} else {
+    dragGestureDelta()
+} < 0
 
 @OptIn(ExperimentalFoundationApi::class)
 private fun PagerState.dragGestureDelta() = if (layoutInfo.orientation == Orientation.Horizontal) {

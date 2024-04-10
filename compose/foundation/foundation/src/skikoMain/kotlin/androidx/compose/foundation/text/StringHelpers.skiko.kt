@@ -121,16 +121,19 @@ internal fun findNextNonWhitespaceSymbolsSubsequenceStartOffset(
     }
     currentOffset = nextOffset
 
-    while (nextOffset != BreakIterator.DONE) {
-        nextOffset = charIterator.next()
+    nextOffset = charIterator.next()
+
+    while (nextOffset < currentText.length) { // charIterator.next() works one more time than needed, better use this
         if (currentText.codePointAt(currentOffset).isWhitespace() && !currentText.codePointAt(
                 nextOffset
             ).isWhitespace()
         ) {
-            return currentOffset
+            return nextOffset
         } else {
             currentOffset = nextOffset
         }
+
+        nextOffset = charIterator.next()
     }
     return currentOffset
 }

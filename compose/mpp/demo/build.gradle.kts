@@ -15,6 +15,7 @@
  */
 
 import androidx.build.AndroidXComposePlugin
+import androidx.build.JetbrainsAndroidXPlugin
 import java.util.*
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
 import org.jetbrains.kotlin.gradle.plugin.mpp.NativeBuildType
@@ -27,9 +28,11 @@ plugins {
     id("kotlin-multiplatform")
 //  [1.4 Update]  id("application")
     kotlin("plugin.serialization") version "1.9.21"
+    id("JetbrainsAndroidXPlugin")
 }
 
 AndroidXComposePlugin.applyAndConfigureKotlinPlugin(project)
+JetbrainsAndroidXPlugin.applyAndConfigure(project)
 
 dependencies {
 
@@ -156,6 +159,13 @@ kotlin {
                 implementation(project(":compose:ui:ui"))
                 implementation(project(":compose:ui:ui-graphics"))
                 implementation(project(":compose:ui:ui-text"))
+                implementation(project(":lifecycle:lifecycle-common"))
+                implementation(project(":lifecycle:lifecycle-runtime"))
+                implementation(project(":lifecycle:lifecycle-runtime-compose"))
+                implementation(project(":navigation:navigation-common"))
+                implementation(project(":navigation:navigation-compose"))
+                implementation(project(":navigation:navigation-runtime"))
+                implementation(libs.kotlinStdlib)
                 implementation(libs.kotlinCoroutinesCore)
                 api(libs.kotlinSerializationCore)
             }
@@ -171,24 +181,24 @@ kotlin {
         val desktopMain by getting {
             dependsOn(skikoMain)
             dependencies {
+                implementation(libs.kotlinCoroutinesSwing)
                 implementation(libs.skikoCurrentOs)
                 implementation(project(":compose:desktop:desktop"))
             }
         }
 
-        val jsMain by getting {
+        val webMain by creating {
             dependsOn(skikoMain)
             resources.setSrcDirs(resources.srcDirs)
             resources.srcDirs(unzipTask.map { it.destinationDir })
         }
 
+        val jsMain by getting {
+            dependsOn(webMain)
+        }
+
         val wasmJsMain by getting {
-            dependsOn(skikoMain)
-            resources.setSrcDirs(resources.srcDirs)
-            resources.srcDirs(unzipTask.map { it.destinationDir })
-            dependencies {
-                implementation(libs.kotlinStdlib)
-            }
+            dependsOn(webMain)
         }
 
         val nativeMain by creating { dependsOn(skikoMain) }

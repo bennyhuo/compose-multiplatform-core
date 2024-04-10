@@ -37,6 +37,8 @@ import androidx.compose.ui.configureSwingGlobalsForCompose
 import androidx.compose.ui.platform.GlobalSnapshotManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalLocalization
+import androidx.compose.ui.platform.defaultPlatformLocalization
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -69,7 +71,7 @@ import kotlin.system.exitProcess
  *
  * ```
  * fun main() = application {
- *     val isSplashScreenShowing by remember { mutableStateOf(true) }
+ *     var isSplashScreenShowing by remember { mutableStateOf(true) }
  *
  *     LaunchedEffect(Unit) {
  *         delay(2000)
@@ -77,9 +79,9 @@ import kotlin.system.exitProcess
  *     }
  *
  *     if (isSplashScreenShowing) {
- *         Window(title = "Splash") {}
+ *         Window(::exitApplication, title = "Splash") {}
  *     } else {
- *         Window(title = "App") {}
+ *         Window(::exitApplication, title = "App") {}
  *     }
  * }
  * ```
@@ -161,7 +163,7 @@ fun CoroutineScope.launchApplication(
  * ```
  * fun main() = runBlocking {
  *     awaitApplication {
- *         val isSplashScreenShowing by remember { mutableStateOf(true) }
+ *         var isSplashScreenShowing by remember { mutableStateOf(true) }
  *
  *         LaunchedEffect(Unit) {
  *             delay(2000)
@@ -169,9 +171,9 @@ fun CoroutineScope.launchApplication(
  *         }
  *
  *         if (isSplashScreenShowing) {
- *             Window(title = "Splash") {}
+ *             Window(::exitApplication, title = "Splash") {}
  *         } else {
- *             Window(title = "App") {}
+ *             Window(::exitApplication, title = "App") {}
  *         }
  *     }
  * }
@@ -222,7 +224,11 @@ suspend fun awaitApplication(
                                 // Resources which are defined at the application level can use
                                 // density to calculate intrinsicSize
                                 LocalDensity provides GlobalDensity,
-                                LocalLayoutDirection provides GlobalLayoutDirection
+                                LocalLayoutDirection provides GlobalLayoutDirection,
+                                // This is also provided in `ProvidePlatformCompositionLocals`, but
+                                // for backwards compatibility we need to provide it in the
+                                // application scope too.
+                                LocalLocalization providesDefault defaultPlatformLocalization()
                             ) {
                                 applicationScope.content()
                             }
@@ -245,7 +251,7 @@ suspend fun awaitApplication(
 interface ApplicationScope {
     /**
      * Close all windows created inside the application and cancel all launched effects
-     * (they launch via [LaunchedEffect] and [rememberCoroutineScope].
+     * (they launch via [LaunchedEffect] and [rememberCoroutineScope]).
      */
     fun exitApplication()
 }

@@ -25,7 +25,11 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.LocalSystemTheme
 import androidx.compose.ui.SystemTheme
+import androidx.compose.ui.hapticfeedback.CupertinoHapticFeedback
 import androidx.compose.ui.interop.LocalUIViewController
+import androidx.compose.ui.interop.UIKitInteropContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.PlatformContext
 import androidx.compose.ui.platform.PlatformWindowContext
 import androidx.compose.ui.scene.ComposeScene
@@ -36,11 +40,11 @@ import androidx.compose.ui.scene.MultiLayerComposeScene
 import androidx.compose.ui.scene.SceneLayout
 import androidx.compose.ui.scene.SingleLayerComposeScene
 import androidx.compose.ui.scene.UIViewComposeSceneLayer
-import androidx.compose.ui.uikit.systemDensity
 import androidx.compose.ui.uikit.ComposeUIViewControllerConfiguration
 import androidx.compose.ui.uikit.InterfaceOrientation
 import androidx.compose.ui.uikit.LocalInterfaceOrientation
 import androidx.compose.ui.uikit.PlistSanityCheck
+import androidx.compose.ui.uikit.systemDensity
 import androidx.compose.ui.uikit.utils.CMPViewController
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
@@ -56,6 +60,7 @@ import kotlinx.cinterop.useContents
 import kotlinx.coroutines.Dispatchers
 import org.jetbrains.skiko.OS
 import org.jetbrains.skiko.OSVersion
+import org.jetbrains.skiko.SkikoRenderDelegate
 import org.jetbrains.skiko.available
 import platform.CoreGraphics.CGRect
 import platform.CoreGraphics.CGSize
@@ -75,7 +80,6 @@ import platform.UIKit.UIContentSizeCategoryExtraSmall
 import platform.UIKit.UIContentSizeCategoryLarge
 import platform.UIKit.UIContentSizeCategoryMedium
 import platform.UIKit.UIContentSizeCategorySmall
-import platform.UIKit.UIScreen
 import platform.UIKit.UITraitCollection
 import platform.UIKit.UIUserInterfaceLayoutDirection
 import platform.UIKit.UIUserInterfaceStyle
@@ -93,6 +97,9 @@ internal class ComposeContainer(
     private val configuration: ComposeUIViewControllerConfiguration,
     private val content: @Composable () -> Unit,
 ) : CMPViewController(nibName = null, bundle = null) {
+    val lifecycleOwner = ViewControllerBasedLifecycleOwner()
+    val hapticFeedback = CupertinoHapticFeedback()
+
     private var isInsideSwiftUI = false
     private var mediator: ComposeSceneMediator? = null
     private val layers: MutableList<UIViewComposeSceneLayer> = mutableListOf()
@@ -100,8 +107,8 @@ internal class ComposeContainer(
 
     @OptIn(ExperimentalComposeApi::class)
     private val windowContainer: UIView
-        get() = if (configuration.platformLayers) checkNotNull(view.window) {
-            "ComposeUIViewController.view should be attached to window"
+        get() = if (configuration.platformLayers) {
+            view.window ?: view
         } else view
 
     /*
@@ -174,6 +181,15 @@ internal class ComposeContainer(
         currentInterfaceOrientation?.let {
             interfaceOrientationState.value = it
         }
+
+        updateWindowContainer()
+        mediator?.viewWillLayoutSubviews()
+        layers.fastForEach {
+            it.viewWillLayoutSubviews()
+        }
+    }
+
+    private fun updateWindowContainer() {
         val scale = windowContainer.systemDensity.density
         val size = windowContainer.frame.useContents<CGRect, IntSize> {
             IntSize(
@@ -183,10 +199,6 @@ internal class ComposeContainer(
         }
         windowContext.setContainerSize(size)
         windowContext.setWindowContainer(windowContainer)
-        mediator?.viewWillLayoutSubviews()
-        layers.fastForEach {
-            it.viewWillLayoutSubviews()
-        }
     }
 
     override fun viewWillTransitionToSize(
@@ -229,7 +241,9 @@ internal class ComposeContainer(
         super.viewWillAppear(animated)
 
         isInsideSwiftUI = checkIfInsideSwiftUI()
-        setContent(content)
+        createMediatorIfNeeded()
+
+        lifecycleOwner.handleViewWillAppear()
         configuration.delegate.viewWillAppear(animated)
     }
 
@@ -239,6 +253,7 @@ internal class ComposeContainer(
         layers.fastForEach {
             it.viewDidAppear(animated)
         }
+        updateWindowContainer()
         configuration.delegate.viewDidAppear(animated)
     }
 
@@ -258,6 +273,7 @@ internal class ComposeContainer(
             kotlin.native.internal.GC.collect()
         }
 
+        lifecycleOwner.handleViewDidDisappear()
         configuration.delegate.viewDidDisappear(animated)
     }
 
@@ -276,8 +292,8 @@ internal class ComposeContainer(
         ComposeSceneContextImpl(platformContext)
 
     @OptIn(ExperimentalComposeApi::class)
-    private fun createSkikoUIView(renderRelegate: RenderingUIView.Delegate): RenderingUIView =
-        RenderingUIView(renderDelegate = renderRelegate).apply {
+    private fun createSkikoUIView(interopContext: UIKitInteropContext, renderRelegate: SkikoRenderDelegate): RenderingUIView =
+        RenderingUIView(interopContext, renderRelegate).apply {
             opaque = configuration.opaque
         }
 
@@ -288,28 +304,34 @@ internal class ComposeContainer(
         coroutineContext: CoroutineContext,
     ): ComposeScene = if (configuration.platformLayers) {
         SingleLayerComposeScene(
-            coroutineContext = coroutineContext,
             density = systemDensity,
-            invalidate = invalidate,
             layoutDirection = layoutDirection,
+            coroutineContext = coroutineContext,
             composeSceneContext = ComposeSceneContextImpl(
                 platformContext = platformContext
             ),
+            invalidate = invalidate,
         )
     } else {
         MultiLayerComposeScene(
+            density = systemDensity,
+            layoutDirection = layoutDirection,
             coroutineContext = coroutineContext,
             composeSceneContext = ComposeSceneContextImpl(
                 platformContext = platformContext
             ),
-            density = systemDensity,
             invalidate = invalidate,
-            layoutDirection = layoutDirection,
         )
     }
 
-    private fun setContent(content: @Composable () -> Unit) {
-        val mediator = mediator ?: ComposeSceneMediator(
+    private fun createMediatorIfNeeded() {
+        if (mediator == null) {
+            mediator = createMediator()
+        }
+    }
+
+    private fun createMediator(): ComposeSceneMediator {
+        val mediator = ComposeSceneMediator(
             container = view,
             configuration = configuration,
             focusStack = focusStack,
@@ -317,18 +339,16 @@ internal class ComposeContainer(
             coroutineContext = coroutineDispatcher,
             renderingUIViewFactory = ::createSkikoUIView,
             composeSceneFactory = ::createComposeScene,
-        ).also {
-            this.mediator = it
-        }
+        )
         mediator.setContent {
-            ProvideContainerCompositionLocals(this) {
-                content()
-            }
+            ProvideContainerCompositionLocals(this, content)
         }
         mediator.setLayout(SceneLayout.UseConstraintsToFillContainer)
+        return mediator
     }
 
     private fun dispose() {
+        lifecycleOwner.dispose()
         mediator?.dispose()
         mediator = null
         layers.fastForEach {
@@ -362,7 +382,6 @@ internal class ComposeContainer(
                 focusStack = if (focusable) focusStack else null,
                 windowContext = windowContext,
                 compositionContext = compositionContext,
-                compositionLocalContext = mediator?.compositionLocalContext,
             )
     }
 
@@ -410,9 +429,11 @@ internal fun ProvideContainerCompositionLocals(
     content: @Composable () -> Unit,
 ) = with(composeContainer) {
     CompositionLocalProvider(
+        LocalHapticFeedback provides hapticFeedback,
         LocalUIViewController provides this,
         LocalInterfaceOrientation provides interfaceOrientationState.value,
         LocalSystemTheme provides systemThemeState.value,
+        LocalLifecycleOwner provides lifecycleOwner,
         content = content
     )
 }

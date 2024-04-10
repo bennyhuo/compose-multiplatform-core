@@ -16,38 +16,50 @@
 
 package androidx.compose.ui.scene
 
+import java.awt.event.KeyEvent as AwtKeyEvent
+import java.awt.event.MouseEvent as AwtMouseEvent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionContext
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.ComposeFeatureFlags
 import androidx.compose.ui.LayerType
-import androidx.compose.ui.awt.LocalLayerContainer
+import androidx.compose.ui.awt.AwtEventFilter
+import androidx.compose.ui.awt.AwtEventListener
+import androidx.compose.ui.awt.AwtEventListeners
 import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.PlatformContext
 import androidx.compose.ui.platform.PlatformWindowContext
 import androidx.compose.ui.scene.skia.SkiaLayerComponent
 import androidx.compose.ui.scene.skia.SwingSkiaLayerComponent
 import androidx.compose.ui.scene.skia.WindowSkiaLayerComponent
+import androidx.compose.ui.skiko.OverlayRenderDecorator
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.util.fastForEach
+import androidx.compose.ui.util.fastForEachReversed
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.WindowExceptionHandler
 import androidx.compose.ui.window.density
 import androidx.compose.ui.window.layoutDirectionFor
 import androidx.compose.ui.window.sizeInPx
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
 import java.awt.Component
 import java.awt.Window
 import java.awt.event.ComponentEvent
 import java.awt.event.ComponentListener
 import java.awt.event.WindowEvent
 import java.awt.event.WindowFocusListener
+import java.awt.event.WindowListener
 import javax.swing.JLayeredPane
 import javax.swing.SwingUtilities
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CoroutineExceptionHandler
+import org.jetbrains.skia.Canvas
 import org.jetbrains.skiko.MainUIDispatcher
 import org.jetbrains.skiko.SkiaLayerAnalytics
 
@@ -73,7 +85,7 @@ internal class ComposeContainer(
 
     private val useSwingGraphics: Boolean = ComposeFeatureFlags.useSwingGraphics,
     private val layerType: LayerType = ComposeFeatureFlags.layerType,
-) : ComponentListener, WindowFocusListener {
+) : ComponentListener, WindowFocusListener, WindowListener, LifecycleOwner {
     val windowContext = PlatformWindowContext()
     var window: Window? = null
         private set
@@ -102,7 +114,8 @@ internal class ComposeContainer(
             _windowContainer = value
 
             windowContext.setWindowContainer(value)
-            onChangeWindowBounds()
+            onChangeWindowSize()
+            onChangeWindowPosition()
         }
 
     private val coroutineExceptionHandler = DesktopCoroutineExceptionHandler()
@@ -114,6 +127,10 @@ internal class ComposeContainer(
         exceptionHandler = {
             exceptionHandler?.onException(it) ?: throw it
         },
+        eventListener = AwtEventListeners(
+            DetectEventOutsideLayer(),
+            FocusableLayerEventFilter()
+        ),
         coroutineContext = coroutineContext,
         skiaLayerComponentFactory = ::createSkiaLayerComponent,
         composeSceneFactory = ::createComposeScene,
@@ -132,6 +149,8 @@ internal class ComposeContainer(
     val renderApi by mediator::renderApi
     val preferredSize by mediator::preferredSize
 
+    override val lifecycle = LifecycleRegistry(this)
+
     init {
         setWindow(window)
         this.windowContainer = windowContainer
@@ -139,32 +158,78 @@ internal class ComposeContainer(
         if (layerType == LayerType.OnComponent && !useSwingGraphics) {
             error("Unsupported LayerType.OnComponent might be used only with rendering to Swing graphics")
         }
+
+        lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
     }
 
     fun dispose() {
+        lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
+
+        _windowContainer?.removeComponentListener(this)
         mediator.dispose()
         layers.fastForEach(DesktopComposeSceneLayer::close)
     }
 
-    override fun componentResized(e: ComponentEvent?) = onChangeWindowBounds()
-    override fun componentMoved(e: ComponentEvent?) = onChangeWindowBounds()
+    override fun componentResized(e: ComponentEvent?)  {
+        onChangeWindowSize()
+
+        // Sometimes Swing displays interop views in incorrect order after resizing,
+        // so we need to force re-validate it.
+        container.validate()
+        container.repaint()
+    }
+    override fun componentMoved(e: ComponentEvent?) = onChangeWindowPosition()
     override fun componentShown(e: ComponentEvent?) = Unit
     override fun componentHidden(e: ComponentEvent?) = Unit
 
     override fun windowGainedFocus(event: WindowEvent) = onChangeWindowFocus()
     override fun windowLostFocus(event: WindowEvent) = onChangeWindowFocus()
 
+    override fun windowOpened(e: WindowEvent) = Unit
+    override fun windowClosing(e: WindowEvent) = Unit
+    override fun windowClosed(e: WindowEvent) = Unit
+    override fun windowIconified(e: WindowEvent) =
+        lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
+    override fun windowDeiconified(e: WindowEvent) =
+        // The window is always in focus at this moment, so bump the state to [RESUMED].
+        // It will generate [ON_START] event implicitly or skip it at all if [windowGainedFocus]
+        // happened first.
+        lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+    override fun windowActivated(e: WindowEvent) = Unit
+    override fun windowDeactivated(e: WindowEvent) = Unit
+
     private fun onChangeWindowFocus() {
-        windowContext.setWindowFocused(window?.isFocused ?: false)
+        val isFocused = window?.isFocused ?: false
+        windowContext.setWindowFocused(isFocused)
         mediator.onChangeWindowFocus()
         layers.fastForEach(DesktopComposeSceneLayer::onChangeWindowFocus)
+        lifecycle.handleLifecycleEvent(
+            event = if (isFocused) Lifecycle.Event.ON_RESUME else Lifecycle.Event.ON_PAUSE
+        )
     }
 
-    private fun onChangeWindowBounds() {
+    private fun onChangeWindowPosition() {
+        if (!container.isDisplayable) return
+
+        mediator.onChangeComponentPosition()
+        layers.fastForEach(DesktopComposeSceneLayer::onChangeWindowPosition)
+    }
+
+    private fun onChangeWindowSize() {
         if (!container.isDisplayable) return
 
         windowContext.setContainerSize(windowContainer.sizeInPx)
-        layers.fastForEach(DesktopComposeSceneLayer::onChangeWindowBounds)
+        mediator.onChangeComponentSize()
+        layers.fastForEach(DesktopComposeSceneLayer::onChangeWindowSize)
+    }
+
+    /**
+     * Callback to let layers draw overlay on main [mediator].
+     */
+    private fun onRenderOverlay(canvas: Canvas, width: Int, height: Int) {
+        layers.fastForEach {
+            it.onRenderOverlay(canvas, width, height, windowContext.isWindowTransparent)
+        }
     }
 
     fun onChangeWindowTransparency(value: Boolean) {
@@ -187,15 +252,16 @@ internal class ComposeContainer(
         setWindow(SwingUtilities.getWindowAncestor(container))
 
         // Re-checking the actual size if it wasn't available during init.
-        onChangeWindowBounds()
+        onChangeWindowSize()
+        onChangeWindowPosition()
+
+        lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_START)
     }
 
     fun removeNotify() {
-        setWindow(null)
-    }
+        lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
 
-    fun addToComponentLayer(component: Component) {
-        mediator.addToComponentLayer(component)
+        setWindow(null)
     }
 
     fun setBounds(x: Int, y: Int, width: Int, height: Int) {
@@ -203,7 +269,8 @@ internal class ComposeContainer(
 
         // In case of preferred size there is no separate event for changing window size,
         // so re-checking the actual size on container resize too.
-        onChangeWindowBounds()
+        onChangeWindowSize()
+        onChangeWindowPosition()
     }
 
     private fun setWindow(window: Window?) {
@@ -212,7 +279,9 @@ internal class ComposeContainer(
         }
 
         this.window?.removeWindowFocusListener(this)
+        this.window?.removeWindowListener(this)
         window?.addWindowFocusListener(this)
+        window?.addWindowListener(this)
         this.window = window
 
         onChangeWindowFocus()
@@ -234,10 +303,15 @@ internal class ComposeContainer(
     }
 
     private fun createSkiaLayerComponent(mediator: ComposeSceneMediator): SkiaLayerComponent {
+        val renderDelegate = when (layerType) {
+            // Use overlay decorator to allow window layers draw scrim on the main window
+            LayerType.OnWindow -> OverlayRenderDecorator(mediator, ::onRenderOverlay)
+            else -> mediator
+        }
         return if (useSwingGraphics) {
-            SwingSkiaLayerComponent(mediator, skiaLayerAnalytics)
+            SwingSkiaLayerComponent(mediator, renderDelegate, skiaLayerAnalytics)
         } else {
-            WindowSkiaLayerComponent(mediator, windowContext, skiaLayerAnalytics)
+            WindowSkiaLayerComponent(mediator, windowContext, renderDelegate, skiaLayerAnalytics)
         }
     }
 
@@ -246,22 +320,22 @@ internal class ComposeContainer(
         return when (layerType) {
             LayerType.OnSameCanvas ->
                 MultiLayerComposeScene(
+                    density = density,
+                    layoutDirection = layoutDirection,
                     coroutineContext = mediator.coroutineContext,
                     composeSceneContext = createComposeSceneContext(
                         platformContext = mediator.platformContext
                     ),
-                    density = density,
                     invalidate = mediator::onComposeInvalidation,
-                    layoutDirection = layoutDirection,
                 )
             else -> SingleLayerComposeScene(
-                coroutineContext = mediator.coroutineContext,
                 density = density,
-                invalidate = mediator::onComposeInvalidation,
                 layoutDirection = layoutDirection,
+                coroutineContext = mediator.coroutineContext,
                 composeSceneContext = createComposeSceneContext(
                     platformContext = mediator.platformContext
                 ),
+                invalidate = mediator::onComposeInvalidation,
             )
         }
     }
@@ -276,6 +350,7 @@ internal class ComposeContainer(
             LayerType.OnWindow -> WindowComposeSceneLayer(
                 composeContainer = this,
                 skiaLayerAnalytics = skiaLayerAnalytics,
+                transparent = true, // TODO: Consider allowing opaque window layers
                 density = density,
                 layoutDirection = layoutDirection,
                 focusable = focusable,
@@ -293,12 +368,55 @@ internal class ComposeContainer(
         }
     }
 
-    fun attachLayer(layer: DesktopComposeSceneLayer) {
-        layers.add(layer)
+    /**
+     * Generates a sequence of layers that are positioned above the given layer in the layers list.
+     *
+     * @param layer the layer to find layers above
+     * @return a sequence of layers positioned above the given layer
+     */
+    fun layersAbove(layer: DesktopComposeSceneLayer) = sequence {
+        var isAbove = false
+        for (i in layers) {
+            if (i == layer) {
+                isAbove = true
+            } else if (isAbove) {
+                yield(i)
+            }
+        }
     }
 
+    /**
+     * Notify layers about change in layers list. Required for additional invalidation and
+     * re-drawing if needed.
+     *
+     * @param layer the layer that triggered the change
+     */
+    private fun onLayersChange(layer: DesktopComposeSceneLayer) {
+        layers.fastForEach {
+            if (it != layer) {
+                it.onLayersChange()
+            }
+        }
+    }
+
+    /**
+     * Attaches a [DesktopComposeSceneLayer] to the list of layers.
+     *
+     * @param layer the layer to attach
+     */
+    fun attachLayer(layer: DesktopComposeSceneLayer) {
+        layers.add(layer)
+        onLayersChange(layer)
+    }
+
+    /**
+     * Detaches a [DesktopComposeSceneLayer] from the list of layers.
+     *
+     * @param layer the layer to detach
+     */
     fun detachLayer(layer: DesktopComposeSceneLayer) {
         layers.remove(layer)
+        onLayersChange(layer)
     }
 
     fun createComposeSceneContext(platformContext: PlatformContext): ComposeSceneContext =
@@ -326,6 +444,29 @@ internal class ComposeContainer(
             exceptionHandler?.onException(exception) ?: throw exception
         }
     }
+
+    /**
+     * Detect and trigger [DesktopComposeSceneLayer.onMouseEventOutside] if event happened below
+     * focused layer.
+     */
+    private inner class DetectEventOutsideLayer : AwtEventListener {
+        override fun onMouseEvent(event: AwtMouseEvent): Boolean {
+            layers.fastForEachReversed {
+                it.onMouseEventOutside(event)
+                if (it.focusable) {
+                    return false
+                }
+            }
+            return false
+        }
+    }
+
+    private inner class FocusableLayerEventFilter : AwtEventFilter() {
+        private val noFocusableLayers get() = layers.all { !it.focusable }
+
+        override fun shouldSendMouseEvent(event: AwtMouseEvent): Boolean = noFocusableLayers
+        override fun shouldSendKeyEvent(event: AwtKeyEvent): Boolean = noFocusableLayers
+    }
 }
 
 @Composable
@@ -333,6 +474,6 @@ private fun ProvideContainerCompositionLocals(
     composeContainer: ComposeContainer,
     content: @Composable () -> Unit,
 ) = CompositionLocalProvider(
-    LocalLayerContainer provides composeContainer.container,
+    LocalLifecycleOwner provides composeContainer,
     content = content
 )

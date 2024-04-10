@@ -22,65 +22,74 @@ import androidx.compose.runtime.ExperimentalComposeApi
 import androidx.compose.runtime.InternalComposeApi
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.input.key.NativeKeyEvent
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.asComposeCanvas
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.pointer.HistoricalChange
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.PointerType
-import androidx.compose.ui.interop.LocalInteropContainer
+import androidx.compose.ui.interop.LocalUIKitInteropContainer
 import androidx.compose.ui.interop.LocalUIKitInteropContext
+import androidx.compose.ui.interop.UIKitInteropContainer
 import androidx.compose.ui.interop.UIKitInteropContext
-import androidx.compose.ui.interop.UIKitInteropTransaction
+import androidx.compose.ui.node.TrackInteropContainer
 import androidx.compose.ui.platform.AccessibilityMediator
 import androidx.compose.ui.platform.AccessibilitySyncOptions
-import androidx.compose.ui.platform.IOSPlatformContextImpl
+import androidx.compose.ui.platform.DefaultInputModeManager
+import androidx.compose.ui.platform.EmptyViewConfiguration
 import androidx.compose.ui.platform.LocalLayoutMargins
 import androidx.compose.ui.platform.LocalSafeArea
 import androidx.compose.ui.platform.PlatformContext
 import androidx.compose.ui.platform.PlatformInsets
 import androidx.compose.ui.platform.PlatformWindowContext
 import androidx.compose.ui.platform.UIKitTextInputService
+import androidx.compose.ui.platform.ViewConfiguration
+import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.semantics.SemanticsOwner
-import androidx.compose.ui.uikit.systemDensity
-import androidx.compose.ui.toDpOffset
-import androidx.compose.ui.toDpRect
 import androidx.compose.ui.uikit.ComposeUIViewControllerConfiguration
 import androidx.compose.ui.uikit.LocalKeyboardOverlapHeight
-import androidx.compose.ui.unit.DpOffset
-import androidx.compose.ui.unit.DpRect
+import androidx.compose.ui.uikit.systemDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.asCGRect
+import androidx.compose.ui.unit.asDpOffset
+import androidx.compose.ui.unit.asDpRect
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
 import androidx.compose.ui.unit.roundToIntRect
+import androidx.compose.ui.unit.toDpRect
 import androidx.compose.ui.unit.toOffset
 import androidx.compose.ui.window.FocusStack
 import androidx.compose.ui.window.InteractionUIView
-import androidx.compose.ui.window.InteropContainer
 import androidx.compose.ui.window.KeyboardEventHandler
 import androidx.compose.ui.window.KeyboardVisibilityListenerImpl
 import androidx.compose.ui.window.RenderingUIView
 import androidx.compose.ui.window.UITouchesEventPhase
 import kotlin.coroutines.CoroutineContext
-import kotlin.math.floor
-import kotlin.math.roundToLong
+import kotlin.math.roundToInt
 import kotlinx.cinterop.CValue
 import kotlinx.cinterop.ObjCAction
 import kotlinx.cinterop.readValue
 import kotlinx.cinterop.useContents
 import org.jetbrains.skia.Canvas
-import org.jetbrains.skiko.SkikoKeyboardEvent
+import org.jetbrains.skiko.SkikoRenderDelegate
 import platform.CoreGraphics.CGAffineTransformIdentity
 import platform.CoreGraphics.CGAffineTransformInvert
 import platform.CoreGraphics.CGPoint
+import platform.CoreGraphics.CGRect
 import platform.CoreGraphics.CGRectMake
 import platform.CoreGraphics.CGRectZero
 import platform.CoreGraphics.CGSize
 import platform.Foundation.NSNotification
 import platform.Foundation.NSNotificationCenter
 import platform.Foundation.NSSelectorFromString
-import platform.Foundation.NSTimeInterval
 import platform.QuartzCore.CATransaction
 import platform.UIKit.NSLayoutConstraint
 import platform.UIKit.UIEvent
@@ -90,6 +99,7 @@ import platform.UIKit.UITouch
 import platform.UIKit.UITouchPhase
 import platform.UIKit.UIView
 import platform.UIKit.UIViewControllerTransitionCoordinatorProtocol
+import platform.UIKit.UIWindow
 import platform.darwin.NSObject
 
 /**
@@ -99,30 +109,42 @@ internal sealed interface SceneLayout {
     object Undefined : SceneLayout
     object UseConstraintsToFillContainer : SceneLayout
     class UseConstraintsToCenter(val size: CValue<CGSize>) : SceneLayout
-    class Bounds(val rect: IntRect) : SceneLayout
+    class Bounds(val renderBounds: IntRect, val interactionBounds: IntRect) : SceneLayout
 }
 
+/**
+ * iOS specific-implementation of [PlatformContext.SemanticsOwnerListener] used to track changes in [SemanticsOwner].
+ *
+ * @property rootView The UI container associated with the semantics owner.
+ * @property coroutineContext The coroutine context to use for handling semantics changes.
+ * @property getAccessibilitySyncOptions A lambda function to retrieve the latest accessibility synchronization options.
+ * @property performEscape A lambda to delegate accessibility escape operation. Returns true if the escape was handled, false otherwise.
+ */
 @OptIn(ExperimentalComposeApi::class)
 private class SemanticsOwnerListenerImpl(
-    private val container: UIView,
+    private val rootView: UIView,
     private val coroutineContext: CoroutineContext,
-    private val getAccessibilitySyncOptions: () -> AccessibilitySyncOptions
-): PlatformContext.SemanticsOwnerListener {
+    private val getAccessibilitySyncOptions: () -> AccessibilitySyncOptions,
+    private val convertToAppWindowCGRect: (Rect, UIWindow) -> CValue<CGRect>,
+    private val performEscape: () -> Boolean
+) : PlatformContext.SemanticsOwnerListener {
     var current: Pair<SemanticsOwner, AccessibilityMediator>? = null
 
     override fun onSemanticsOwnerAppended(semanticsOwner: SemanticsOwner) {
         if (current == null) {
             current = semanticsOwner to AccessibilityMediator(
-                container,
+                rootView,
                 semanticsOwner,
                 coroutineContext,
-                getAccessibilitySyncOptions
+                getAccessibilitySyncOptions,
+                convertToAppWindowCGRect,
+                performEscape
             )
         }
     }
 
     override fun onSemanticsOwnerRemoved(semanticsOwner: SemanticsOwner) {
-        val current = checkNotNull(current)
+        val current = current ?: return
 
         if (current.first == semanticsOwner) {
             current.second.dispose()
@@ -137,28 +159,38 @@ private class SemanticsOwnerListenerImpl(
             current.second.onSemanticsChange()
         }
     }
+
+    override fun onLayoutChange(semanticsOwner: SemanticsOwner, semanticsNodeId: Int) {
+        val current = current ?: return
+
+        if (current.first == semanticsOwner) {
+            current.second.onLayoutChange(nodeId = semanticsNodeId)
+        }
+    }
 }
 
 private class RenderingUIViewDelegateImpl(
-    private val interopContext: UIKitInteropContext,
-    private val getBoundsInPx: () -> IntRect,
-    private val scene: ComposeScene
-): RenderingUIView.Delegate {
-    override fun retrieveInteropTransaction(): UIKitInteropTransaction =
-        interopContext.retrieve()
+    private val scene: ComposeScene,
+    private val sceneOffset: () -> Offset,
+) : SkikoRenderDelegate {
+    override fun onRender(canvas: Canvas, width: Int, height: Int, nanoTime: Long) {
+        canvas.withSceneOffset {
+            scene.render(asComposeCanvas(), nanoTime)
+        }
+    }
 
-    override fun render(canvas: Canvas, targetTimestamp: NSTimeInterval) {
-        val composeCanvas = canvas.asComposeCanvas()
-        val topLeft = getBoundsInPx().topLeft.toOffset()
-        composeCanvas.translate(-topLeft.x, -topLeft.y)
-        scene.render(composeCanvas, targetTimestamp.toNanoSeconds())
-        composeCanvas.translate(topLeft.x, topLeft.y)
+    private inline fun Canvas.withSceneOffset(block: Canvas.() -> Unit) {
+        val sceneOffset = sceneOffset()
+        save()
+        translate(sceneOffset.x, sceneOffset.y)
+        block()
+        restore()
     }
 }
 
 private class NativeKeyboardVisibilityListener(
     private val keyboardVisibilityListener: KeyboardVisibilityListenerImpl
-): NSObject() {
+) : NSObject() {
     @Suppress("unused")
     @ObjCAction
     fun keyboardWillShow(arg: NSNotification) {
@@ -172,18 +204,35 @@ private class NativeKeyboardVisibilityListener(
     }
 }
 
+private class ComposeSceneMediatorRootUIView : UIView(CGRectZero.readValue()) {
+    override fun hitTest(point: CValue<CGPoint>, withEvent: UIEvent?): UIView? {
+        // forwards touches forward to the children, is never a target for a touch
+        val result = super.hitTest(point, withEvent)
+
+        return if (result == this) {
+            null
+        } else {
+            result
+        }
+    }
+}
+
 internal class ComposeSceneMediator(
     private val container: UIView,
     private val configuration: ComposeUIViewControllerConfiguration,
     private val focusStack: FocusStack<UIView>?,
     private val windowContext: PlatformWindowContext,
+    /**
+     * @see PlatformContext.measureDrawLayerBounds
+     */
+    private val measureDrawLayerBounds: Boolean = false,
     val coroutineContext: CoroutineContext,
-    private val renderingUIViewFactory: (RenderingUIView.Delegate) -> RenderingUIView,
+    private val renderingUIViewFactory: (UIKitInteropContext, SkikoRenderDelegate) -> RenderingUIView,
     composeSceneFactory: (
         invalidate: () -> Unit,
         platformContext: PlatformContext,
         coroutineContext: CoroutineContext
-    ) -> ComposeScene,
+    ) -> ComposeScene
 ) {
     private val focusable: Boolean get() = focusStack != null
     private val keyboardOverlapHeightState: MutableState<Float> = mutableStateOf(0f)
@@ -197,10 +246,19 @@ internal class ComposeSceneMediator(
             NSLayoutConstraint.activateConstraints(value)
         }
 
+    private val viewConfiguration: ViewConfiguration =
+        object : ViewConfiguration by EmptyViewConfiguration {
+            override val touchSlop: Float
+                get() = with(density) {
+                    // this value is originating from iOS 16 drag behavior reverse engineering
+                    10.dp.toPx()
+                }
+        }
+
     private val scene: ComposeScene by lazy {
         composeSceneFactory(
             ::onComposeSceneInvalidate,
-            platformContext,
+            IOSPlatformContext(),
             coroutineContext,
         )
     }
@@ -212,13 +270,23 @@ internal class ComposeSceneMediator(
     private val focusManager get() = scene.focusManager
 
     private val renderingView by lazy {
-        renderingUIViewFactory(renderDelegate)
+        renderingUIViewFactory(interopContext, renderDelegate)
     }
+
+    /**
+     * view, that contains [interopViewContainer] and [interactionView] and is added to [container]
+     */
+    private val rootView = ComposeSceneMediatorRootUIView()
 
     /**
      * Container for UIKitView and UIKitViewController
      */
-    private val interopViewContainer = InteropContainer()
+    private val interopViewContainer = UIKitInteropContainer()
+
+    private val interactionBounds: IntRect get() {
+        val boundsLayout = _layout as? SceneLayout.Bounds
+        return boundsLayout?.interactionBounds ?: renderingViewBoundsInPx
+    }
 
     private val interactionView by lazy {
         InteractionUIView(
@@ -228,33 +296,40 @@ internal class ComposeSceneMediator(
                 val needHighFrequencyPolling = count > 0
                 renderingView.redrawer.needsProactiveDisplayLink = needHighFrequencyPolling
             },
-            checkBounds = { dpPoint: DpOffset ->
-                val point = dpPoint.toOffset(container.systemDensity)
-                getBoundsInPx().contains(point.round())
+            inBounds = { point ->
+                val positionInContainer = point.useContents {
+                    asDpOffset().toOffset(container.systemDensity).round()
+                }
+                interactionBounds.contains(positionInContainer)
             }
         )
     }
 
     private val interopContext: UIKitInteropContext by lazy {
         UIKitInteropContext(
-            requestRedraw = { onComposeSceneInvalidate() }
+            requestRedraw = ::onComposeSceneInvalidate
         )
     }
 
     @OptIn(ExperimentalComposeApi::class)
     private val semanticsOwnerListener by lazy {
-        SemanticsOwnerListenerImpl(container, coroutineContext, getAccessibilitySyncOptions = {
-            configuration.accessibilitySyncOptions
-        })
-    }
+        SemanticsOwnerListenerImpl(
+            rootView,
+            coroutineContext,
+            getAccessibilitySyncOptions = {
+                configuration.accessibilitySyncOptions
+            },
+            convertToAppWindowCGRect = { rect, window ->
+               windowContext.convertWindowRect(rect, window)
+                   .toDpRect(Density(window.screen.scale.toFloat()))
+                   .asCGRect()
+            },
+            performEscape = {
+                val down = onKeyboardEvent(KeyEvent(Key.Escape, KeyEventType.KeyDown))
+                val up = onKeyboardEvent(KeyEvent(Key.Escape, KeyEventType.KeyUp))
 
-    private val platformContext: PlatformContext by lazy {
-        IOSPlatformContextImpl(
-            inputServices = uiKitTextInputService,
-            textToolbar = uiKitTextInputService,
-            windowInfo = windowContext.windowInfo,
-            density = container.systemDensity,
-            semanticsOwnerListener = semanticsOwnerListener
+                down || up
+            }
         )
     }
 
@@ -271,11 +346,8 @@ internal class ComposeSceneMediator(
 
     private val keyboardEventHandler: KeyboardEventHandler by lazy {
         object : KeyboardEventHandler {
-            override fun onKeyboardEvent(event: SkikoKeyboardEvent) {
-                val composeEvent = KeyEvent(event)
-                if (!uiKitTextInputService.onPreviewKeyEvent(composeEvent)) {
-                    scene.sendKeyEvent(composeEvent)
-                }
+            override fun onKeyboardEvent(event: KeyEvent) {
+                this@ComposeSceneMediator.onKeyboardEvent(event)
             }
         }
     }
@@ -288,6 +360,7 @@ internal class ComposeSceneMediator(
             },
             rootViewProvider = { container },
             densityProvider = { container.systemDensity },
+            viewConfiguration = viewConfiguration,
             focusStack = focusStack,
             keyboardEventHandler = keyboardEventHandler
         )
@@ -297,7 +370,7 @@ internal class ComposeSceneMediator(
         object : InteractionUIView.Delegate {
             override fun pointInside(point: CValue<CGPoint>, event: UIEvent?): Boolean =
                 point.useContents {
-                    val position = this.toDpOffset().toOffset(density)
+                    val position = this.asDpOffset().toOffset(density)
                     !scene.hitTestInteropView(position)
                 }
 
@@ -330,11 +403,13 @@ internal class ComposeSceneMediator(
 
     private val renderDelegate by lazy {
         RenderingUIViewDelegateImpl(
-            interopContext = interopContext,
-            getBoundsInPx = ::getBoundsInPx,
-            scene = scene
+            scene = scene,
+            sceneOffset = { -renderingViewBoundsInPx.topLeft.toOffset() }
         )
     }
+
+    var density by scene::density
+    var layoutDirection by scene::layoutDirection
 
     private var onAttachedToWindow: (() -> Unit)? = null
     private fun runOnceViewAttached(block: () -> Unit) {
@@ -348,6 +423,9 @@ internal class ComposeSceneMediator(
         }
     }
 
+    fun hitTestInteractionView(point: CValue<CGPoint>, withEvent: UIEvent?): UIView? =
+        interactionView.hitTest(point, withEvent)
+
     init {
         renderingView.onAttachedToWindow = {
             renderingView.onAttachedToWindow = null
@@ -355,16 +433,25 @@ internal class ComposeSceneMediator(
             this.onAttachedToWindow?.invoke()
             focusStack?.pushAndFocus(interactionView)
         }
-        container.addSubview(interopViewContainer)
-        interopViewContainer.translatesAutoresizingMaskIntoConstraints = false
+
+        rootView.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(rootView)
         NSLayoutConstraint.activateConstraints(
-            getConstraintsToFillParent(interopViewContainer, container)
+            getConstraintsToFillParent(rootView, container)
         )
-        container.addSubview(interactionView)
+
+        interopViewContainer.containerView.translatesAutoresizingMaskIntoConstraints = false
+        rootView.addSubview(interopViewContainer.containerView)
+        NSLayoutConstraint.activateConstraints(
+            getConstraintsToFillParent(interopViewContainer.containerView, rootView)
+        )
+
         interactionView.translatesAutoresizingMaskIntoConstraints = false
+        rootView.addSubview(interactionView)
         NSLayoutConstraint.activateConstraints(
-            getConstraintsToFillParent(interactionView, container)
+            getConstraintsToFillParent(interactionView, rootView)
         )
+        // FIXME: interactionView might be smaller than renderingView (shadows etc)
         interactionView.addSubview(renderingView)
     }
 
@@ -382,7 +469,9 @@ internal class ComposeSceneMediator(
                  */
                 if (renderingView.isReadyToShowContent.value) {
                     ProvideComposeSceneMediatorCompositionLocals {
-                        content()
+                        interopViewContainer.TrackInteropContainer(
+                            content = content
+                        )
                     }
                 }
             }
@@ -408,19 +497,18 @@ internal class ComposeSceneMediator(
     private fun ProvideComposeSceneMediatorCompositionLocals(content: @Composable () -> Unit) =
         CompositionLocalProvider(
             LocalUIKitInteropContext provides interopContext,
+            LocalUIKitInteropContainer provides interopViewContainer,
             LocalKeyboardOverlapHeight provides keyboardOverlapHeightState.value,
             LocalSafeArea provides safeAreaState.value,
             LocalLayoutMargins provides layoutMarginsState.value,
-            LocalInteropContainer provides interopViewContainer,
             content = content
         )
 
     fun dispose() {
         focusStack?.popUntilNext(renderingView)
         renderingView.dispose()
-        renderingView.removeFromSuperview()
         interactionView.dispose()
-        interactionView.removeFromSuperview()
+        rootView.removeFromSuperview()
         scene.close()
         // After scene is disposed all UIKit interop actions can't be deferred to be synchronized with rendering
         // Thus they need to be executed now.
@@ -449,7 +537,7 @@ internal class ComposeSceneMediator(
                 val density = container.systemDensity.density
                 renderingView.translatesAutoresizingMaskIntoConstraints = true
                 renderingView.setFrame(
-                    with(value.rect) {
+                    with(value.renderBounds) {
                         CGRectMake(
                             x = left.toDouble() / density,
                             y = top.toDouble() / density,
@@ -467,13 +555,18 @@ internal class ComposeSceneMediator(
 
     fun viewWillLayoutSubviews() {
         val density = container.systemDensity
-        //TODO: Current code updates layout based on rootViewController size.
-        // Maybe we need to rewrite it for SingleLayerComposeScene.
+        scene.density = density
 
-        val boundsInWindow = windowContext.boundsInWindow(container)
-        scene.density = density // TODO: Maybe it is wrong to set density to scene here?
-        scene.boundsInWindow = boundsInWindow
-        onComposeSceneInvalidate()
+        // TODO: it should be updated on any container size change
+        val boundsInPx = container.bounds.useContents {
+            with(density) {
+                asDpRect().toRect()
+            }
+        }
+        scene.size = IntSize(
+            width = boundsInPx.width.roundToInt(),
+            height = boundsInPx.height.roundToInt()
+        )
     }
 
     private fun calcSafeArea(): PlatformInsets =
@@ -496,10 +589,8 @@ internal class ComposeSceneMediator(
             )
         }
 
-    fun getBoundsInDp(): DpRect = renderingView.frame.useContents { this.toDpRect() }
-
-    fun getBoundsInPx(): IntRect = with(container.systemDensity) {
-        getBoundsInDp().toRect().roundToIntRect()
+    private val renderingViewBoundsInPx: IntRect get() = with(container.systemDensity) {
+        renderingView.frame.useContents { asDpRect().toRect().roundToIntRect() }
     }
 
     fun viewWillTransitionToSize(
@@ -581,9 +672,38 @@ internal class ComposeSceneMediator(
         size.height
     }
 
-    var density by scene::density
-    var layoutDirection by scene::layoutDirection
+    private var _onPreviewKeyEvent: (KeyEvent) -> Boolean = { false }
+    private var _onKeyEvent: (KeyEvent) -> Boolean = { false }
+    fun setKeyEventListener(
+        onPreviewKeyEvent: ((KeyEvent) -> Boolean)?,
+        onKeyEvent: ((KeyEvent) -> Boolean)?
+    ) {
+        this._onPreviewKeyEvent = onPreviewKeyEvent ?: { false }
+        this._onKeyEvent = onKeyEvent ?: { false }
+    }
 
+    private fun onKeyboardEvent(keyEvent: KeyEvent): Boolean =
+        uiKitTextInputService.onPreviewKeyEvent(keyEvent) // TODO: fix redundant call
+            || _onPreviewKeyEvent(keyEvent)
+            || scene.sendKeyEvent(keyEvent)
+            || _onKeyEvent(keyEvent)
+
+    private inner class IOSPlatformContext : PlatformContext by PlatformContext.Empty {
+        override val windowInfo: WindowInfo get() = windowContext.windowInfo
+
+        override fun calculatePositionInWindow(localPosition: Offset): Offset =
+            windowContext.calculatePositionInWindow(container, localPosition)
+
+        override fun calculateLocalPosition(positionInWindow: Offset): Offset =
+            windowContext.calculateLocalPosition(container, positionInWindow)
+
+        override val measureDrawLayerBounds get() = this@ComposeSceneMediator.measureDrawLayerBounds
+        override val viewConfiguration get() = this@ComposeSceneMediator.viewConfiguration
+        override val inputModeManager = DefaultInputModeManager(InputMode.Touch)
+        override val textInputService get() = this@ComposeSceneMediator.uiKitTextInputService
+        override val textToolbar get() = this@ComposeSceneMediator.uiKitTextInputService
+        override val semanticsOwnerListener get() = this@ComposeSceneMediator.semanticsOwnerListener
+    }
 }
 
 internal fun getConstraintsToFillParent(view: UIView, parent: UIView) =
@@ -649,14 +769,3 @@ private fun UITouch.offsetInView(view: UIView, density: Float): Offset =
     locationInView(view).useContents {
         Offset(x.toFloat() * density, y.toFloat() * density)
     }
-
-private fun NSTimeInterval.toNanoSeconds(): Long {
-    // The calculation is split in two instead of
-    // `(targetTimestamp * 1e9).toLong()`
-    // to avoid losing precision for fractional part
-    val integral = floor(this)
-    val fractional = this - integral
-    val secondsToNanos = 1_000_000_000L
-    val nanos = integral.roundToLong() * secondsToNanos + (fractional * 1e9).roundToLong()
-    return nanos
-}

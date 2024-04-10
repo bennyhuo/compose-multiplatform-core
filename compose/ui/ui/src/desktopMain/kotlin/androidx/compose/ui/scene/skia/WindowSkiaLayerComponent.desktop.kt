@@ -24,26 +24,33 @@ import javax.accessibility.Accessible
 import org.jetbrains.skiko.GraphicsApi
 import org.jetbrains.skiko.SkiaLayer
 import org.jetbrains.skiko.SkiaLayerAnalytics
+import org.jetbrains.skiko.SkikoRenderDelegate
 
 /**
- * Provides a heavyweight AWT [contentComponent] used to render content (provided by client.skikoView) on-screen with Skia.
+ * Provides a heavyweight AWT [contentComponent] used to render content
+ * (provided by [SkikoRenderDelegate]) on-screen with Skia.
  *
  * If smooth interop with Swing is needed, consider using [SwingSkiaLayerComponent]
  */
 internal class WindowSkiaLayerComponent(
     private val mediator: ComposeSceneMediator,
     private val windowContext: PlatformWindowContext,
-    skiaLayerAnalytics: SkiaLayerAnalytics,
+    renderDelegate: SkikoRenderDelegate,
+    skiaLayerAnalytics: SkiaLayerAnalytics
 ) : SkiaLayerComponent {
     /**
      * See also backend layer for swing interop in [SwingSkiaLayerComponent]
      */
     override val contentComponent: SkiaLayer = object : SkiaLayer(
-        externalAccessibleFactory = { mediator.accessible },
+        externalAccessibleFactory = {
+            // It depends on initialization order, so explicitly
+            // apply `checkNotNull` for "non-null" field.
+            checkNotNull(mediator.accessible)
+        },
         analytics = skiaLayerAnalytics
     ) {
         override fun paint(g: Graphics) {
-            mediator.onChangeComponentDensity()
+            mediator.onChangeDensity()
             super.paint(g)
         }
 
@@ -92,7 +99,7 @@ internal class WindowSkiaLayerComponent(
     override val windowHandle by contentComponent::windowHandle
 
     init {
-        contentComponent.skikoView = mediator.skikoView
+        contentComponent.renderDelegate = renderDelegate
     }
 
     override fun dispose() {

@@ -21,6 +21,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -31,15 +32,14 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.layout.EmptyLayout
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
-import androidx.compose.ui.platform.InsetsConfig
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.PlatformInsets
 import androidx.compose.ui.platform.PlatformInsetsConfig
-import androidx.compose.ui.platform.ZeroInsetsConfig
 import androidx.compose.ui.scene.ComposeSceneLayer
 import androidx.compose.ui.scene.rememberComposeSceneLayer
 import androidx.compose.ui.semantics.popup
@@ -390,11 +390,15 @@ fun Popup(
     onKeyEvent: ((KeyEvent) -> Boolean)? = null,
     content: @Composable () -> Unit
 ) {
+    val currentOnDismissRequest by rememberUpdatedState(onDismissRequest)
+    val currentOnKeyEvent by rememberUpdatedState(onKeyEvent)
+
     val overriddenOnKeyEvent = if (properties.dismissOnBackPress && onDismissRequest != null) {
+        // No need to remember this lambda, as it doesn't capture any values that can change.
         { event: KeyEvent ->
-            val consumed = onKeyEvent?.invoke(event) ?: false
+            val consumed = currentOnKeyEvent?.invoke(event) ?: false
             if (!consumed && event.isDismissRequest()) {
-                onDismissRequest()
+                currentOnDismissRequest?.invoke()
                 true
             } else {
                 consumed
@@ -404,9 +408,10 @@ fun Popup(
         onKeyEvent
     }
     val onOutsidePointerEvent = if (properties.dismissOnClickOutside && onDismissRequest != null) {
+        // No need to remember this lambda, as it doesn't capture any values that can change.
         { eventType: PointerEventType ->
             if (eventType == PointerEventType.Press) {
-                onDismissRequest()
+                currentOnDismissRequest?.invoke()
             }
         }
     } else {
@@ -433,7 +438,7 @@ private fun PopupLayout(
     onOutsidePointerEvent: ((eventType: PointerEventType) -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
-    val platformInsets = properties.insetsConfig.safeInsets
+    val platformInsets = properties.platformInsets
     var layoutParentBoundsInWindow: IntRect? by remember { mutableStateOf(null) }
     EmptyLayout(Modifier.parentBoundsInWindow { layoutParentBoundsInWindow = it })
     val layer = rememberComposeSceneLayer(
@@ -454,7 +459,10 @@ private fun PopupLayout(
             layoutDirection = layoutDirection,
             parentBoundsInWindow = parentBoundsInWindow
         )
-        properties.insetsConfig.excludeSafeInsets {
+        PlatformInsetsConfig.excludeInsets(
+            safeInsets = properties.usePlatformInsets,
+            ime = false,
+        ) {
             Layout(
                 content = content,
                 modifier = modifier,
@@ -464,24 +472,19 @@ private fun PopupLayout(
     }
 }
 
+private val PopupProperties.platformInsets: PlatformInsets
+    @Composable get() = if (usePlatformInsets) {
+        PlatformInsetsConfig.safeInsets
+    } else {
+        PlatformInsets.Zero
+    }
+
 @Composable
 private fun rememberLayerContent(layer: ComposeSceneLayer, content: @Composable () -> Unit) {
     remember(layer, content) {
         layer.setContent(content)
     }
 }
-
-@Composable
-private fun EmptyLayout(modifier: Modifier = Modifier) = Layout(
-    content = {},
-    modifier = modifier,
-    measurePolicy = { _, _ ->
-        layout(0, 0) {}
-    }
-)
-
-private val PopupProperties.insetsConfig: InsetsConfig
-    get() = if (usePlatformInsets) PlatformInsetsConfig else ZeroInsetsConfig
 
 private fun Modifier.parentBoundsInWindow(
     onBoundsChanged: (IntRect) -> Unit
@@ -517,10 +520,7 @@ private fun rememberPopupMeasurePolicy(
                 boundsWithoutInsets, sizeWithoutInsets, layoutDirection, contentSize
             )
             if (properties.clippingEnabled) {
-                IntOffset(
-                    x = positionInWindow.x.coerceIn(0, sizeWithoutInsets.width - contentSize.width),
-                    y = positionInWindow.y.coerceIn(0, sizeWithoutInsets.height - contentSize.height)
-                )
+                clipPosition(positionInWindow, contentSize, sizeWithoutInsets)
             } else {
                 positionInWindow
             }
@@ -529,6 +529,16 @@ private fun rememberPopupMeasurePolicy(
         layer.calculateLocalPosition(positionWithInsets)
     }
 }
+
+private fun clipPosition(position: IntOffset, contentSize: IntSize, containerSize: IntSize) =
+    IntOffset(
+        x = if (contentSize.width < containerSize.width) {
+            position.x.coerceIn(0, containerSize.width - contentSize.width)
+        } else 0,
+        y = if (contentSize.height < containerSize.height) {
+            position.y.coerceIn(0, containerSize.height - contentSize.height)
+        } else 0
+    )
 
 private fun KeyEvent.isDismissRequest() =
     type == KeyEventType.KeyDown && key == Key.Escape

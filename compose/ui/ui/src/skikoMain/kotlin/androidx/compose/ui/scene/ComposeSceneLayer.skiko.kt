@@ -17,8 +17,9 @@
 package androidx.compose.ui.scene
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalContext
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.currentCompositionLocalContext
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCompositionContext
 import androidx.compose.ui.InternalComposeUiApi
@@ -28,6 +29,8 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.node.LayoutNode
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.WindowInfo
+import androidx.compose.ui.platform.setContent
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -59,12 +62,19 @@ interface ComposeSceneLayer {
     var layoutDirection: LayoutDirection
 
     /**
-     * The real bounds of content in scaled pixels relative to window.
+     * The real bounds of content in pixels relative to [WindowInfo.containerSize].
      * This property is used to set the position and size of [Popup]/[Dialog].
      * The implementation should be ready to react on the changes in size/position that can
      * happen during recompositions.
      */
     var boundsInWindow: IntRect
+
+    /**
+     * Composition locals context which will be provided for the Composable content, which is set by [setContent].
+     *
+     * `null` if no composition locals should be provided.
+     */
+    var compositionLocalContext: CompositionLocalContext?
 
     /**
      * The color of the background fill. It can be set to null if no background drawing is necessary.
@@ -138,7 +148,7 @@ interface ComposeSceneLayer {
 
     /**
      * Returns the position relative to the [ComposeScene] of the [positionInWindow],
-     * the position relative to the window.
+     * the position relative to the window in pixels.
      */
     fun calculateLocalPosition(positionInWindow: IntOffset): IntOffset
 }
@@ -159,6 +169,7 @@ internal fun rememberComposeSceneLayer(
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
     val parentComposition = rememberCompositionContext()
+    val compositionLocalContext = currentCompositionLocalContext
     val layer = remember {
         scene.createLayer(
             density = density,
@@ -168,14 +179,14 @@ internal fun rememberComposeSceneLayer(
         )
     }
     layer.focusable = focusable
+    layer.compositionLocalContext = compositionLocalContext
+    layer.density = density
+    layer.layoutDirection = layoutDirection
+
     DisposableEffect(Unit) {
         onDispose {
             layer.close()
         }
-    }
-    SideEffect {
-        layer.density = density
-        layer.layoutDirection = layoutDirection
     }
     return layer
 }

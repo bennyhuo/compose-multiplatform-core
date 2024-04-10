@@ -20,6 +20,7 @@ import com.android.build.gradle.AppPlugin
 import com.android.build.gradle.LibraryPlugin
 import com.android.utils.childrenIterator
 import com.android.utils.forEach
+import com.android.utils.mapValuesNotNull
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonObject
 import com.google.gson.stream.JsonWriter
@@ -56,9 +57,11 @@ import org.gradle.kotlin.dsl.create
 import org.gradle.kotlin.dsl.findByType
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 import org.jetbrains.kotlin.gradle.plugin.KotlinMultiplatformPluginWrapper
-import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinAndroidTarget
 import org.xml.sax.InputSource
 import org.xml.sax.XMLReader
+import androidx.build.jetbrains.ArtifactRedirecting
+import androidx.build.jetbrains.artifactRedirecting
+import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinAndroidTarget
 
 fun Project.configureMavenArtifactUpload(
     extension: AndroidXExtension,
@@ -116,6 +119,19 @@ private fun Project.configureComponentPublishing(
         "${androidxGroup.group.replace('.', '/')}/$name"
     )
     group = androidxGroup.group
+
+    val mavenCoordsToRedirecting: Provider<Map<String, ArtifactRedirecting>> = provider {
+        project
+            .getProjectsMap()
+            .values
+            .mapNotNull { project.findProject(it) }
+            .associateBy {
+                val group = it.group
+                val name = it.name
+                "$group:$name"
+            }
+            .mapValuesNotNull { it.value.artifactRedirecting() }
+    }
 
     /*
      * Provides a set of maven coordinates (groupId:artifactId) of artifacts in AndroidX
@@ -191,10 +207,10 @@ private fun Project.configureComponentPublishing(
         task.doLast {
             val pomFile = task.destination
             val pom = pomFile.readText()
-            val sortedPom = sortPomDependencies(pom)
+            val modifiedPom = modifyPomDependencies(pom, mavenCoordsToRedirecting.get())
 
-            if (pom != sortedPom) {
-                pomFile.writeText(sortedPom)
+            if (pom != modifiedPom) {
+                pomFile.writeText(modifiedPom)
             }
         }
     }
@@ -217,7 +233,11 @@ private fun Project.configureComponentPublishing(
 /**
  * Looks for a dependencies XML element within [pom] and sorts its contents.
  */
-fun sortPomDependencies(pom: String): String {
+internal fun modifyPomDependencies(
+    pom: String,
+    mavenCoordsToRedirecting: Map<String, ArtifactRedirecting>
+): String {
+    println(mavenCoordsToRedirecting.toList().joinToString("\n"))
     // Workaround for using the default namespace in dom4j.
     val namespaceUris = mapOf("ns" to "http://maven.apache.org/POM/4.0.0")
     val docFactory = DocumentFactory()
@@ -232,7 +252,9 @@ fun sortPomDependencies(pom: String): String {
         .filterIsInstance<Element>()
         .forEach { element ->
             val deps = element.elements()
-            val sortedDeps = deps.toSortedSet(compareBy { it.stringValue }).toList()
+            val modifiedDeps = deps
+                .map { modifyPomDependency(it, mavenCoordsToRedirecting) }
+                .toSortedSet(compareBy { it.stringValue }).toList()
 
             // Content contains formatting nodes, so to avoid modifying those we replace
             // each element with the sorted element from its respective index. Note this
@@ -241,7 +263,7 @@ fun sortPomDependencies(pom: String): String {
             element.content().replaceAll {
                 val index = deps.indexOf(it)
                 if (index >= 0) {
-                    sortedDeps[index]
+                    modifiedDeps[index]
                 } else {
                     it
                 }
@@ -258,6 +280,26 @@ fun sortPomDependencies(pom: String): String {
     }
 
     return stringWriter.toString()
+}
+
+internal fun modifyPomDependency(
+    dependency: Element,
+    mavenCoordsToRedirecting: Map<String, ArtifactRedirecting>
+): Element {
+    val groupId = dependency.selectSingleNode("ns:groupId")
+    val artifactId = dependency.selectSingleNode("ns:artifactId")
+    val version = dependency.selectSingleNode("ns:version")
+    val name = artifactId.stringValue.substringBeforeLast("-")
+    val target = artifactId.stringValue.substringAfterLast("-")
+
+    val coords = "${groupId.stringValue}:$name"
+    val redirecting = mavenCoordsToRedirecting[coords] ?: return dependency
+    val shouldReplace = redirecting.targetNames.contains(target)
+    if (shouldReplace) {
+        groupId.text = redirecting.groupId
+        version.text = redirecting.versionForTargetOrDefault(target)
+    }
+    return dependency
 }
 
 // Coped from org.dom4j.DocumentHelper with modifications to allow SAXReader configuration.
@@ -327,16 +369,16 @@ private fun Project.isMultiplatformPublicationEnabled(): Boolean {
 }
 
 private fun Project.configureMultiplatformPublication(componentFactory: SoftwareComponentFactory) {
-//    TODO: [1.4 Update] workaround for mpp publication -- disable android
-
-//    val multiplatformExtension = extensions.findByType<KotlinMultiplatformExtension>()!!
-//    multiplatformExtension.targets.all { target ->
-//        if (target is KotlinAndroidTarget) {
-//            target.publishLibraryVariants(
-//                Release.DEFAULT_PUBLISH_CONFIG
-//            )
-//        }
-//    }
+    if (project.path != ":core:core-bundle") return
+    val multiplatformExtension = extensions.findByType<KotlinMultiplatformExtension>()!!
+    multiplatformExtension.targets.all { target ->
+        if (target is KotlinAndroidTarget) {
+            target.publishLibraryVariants(
+                Release.DEFAULT_PUBLISH_CONFIG,
+                "debug"
+            )
+        }
+    }
 
     replaceBaseMultiplatformPublication(componentFactory)
 }

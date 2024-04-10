@@ -54,6 +54,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -264,21 +265,21 @@ fun Slider(
     },
     valueRange: ClosedFloatingPointRange<Float> = 0f..1f
 ) {
+    val onValueChangeFinishedState = rememberUpdatedState(onValueChangeFinished)
     val state = remember(
         steps,
-        valueRange,
-        onValueChangeFinished
+        valueRange
     ) {
         SliderState(
             value,
             steps,
-            onValueChangeFinished,
+            { onValueChangeFinishedState.value?.invoke() },
             valueRange
-
         )
     }
 
     state.onValueChange = onValueChange
+    state.onValueChangeFinished = onValueChangeFinished
     state.value = value
 
     Slider(
@@ -542,16 +543,16 @@ fun RangeSlider(
     @IntRange(from = 0)
     steps: Int = 0
 ) {
+    val onValueChangeFinishedState = rememberUpdatedState(onValueChangeFinished)
     val state = remember(
         steps,
-        valueRange,
-        onValueChangeFinished
+        valueRange
     ) {
         RangeSliderState(
             value.start,
             value.endInclusive,
             steps,
-            onValueChangeFinished,
+            { onValueChangeFinishedState.value?.invoke() },
             valueRange
         )
     }
@@ -1789,7 +1790,7 @@ class SliderState(
     value: Float = 0f,
     @IntRange(from = 0)
     val steps: Int = 0,
-    val onValueChangeFinished: (() -> Unit)? = null,
+    onValueChangeFinished: (() -> Unit)? = null,
     val valueRange: ClosedFloatingPointRange<Float> = 0f..1f
 ) : DraggableState {
 
@@ -1842,6 +1843,9 @@ class SliderState(
      */
     internal var onValueChange: ((Float) -> Unit)? = null
 
+    var onValueChangeFinished: (() -> Unit)? = onValueChangeFinished
+        internal set
+
     internal val tickFractions = stepsToTickFractions(steps)
     private var totalWidth by mutableIntStateOf(0)
     internal var isRtl = false
@@ -1868,7 +1872,7 @@ class SliderState(
     internal val gestureEndAction = {
         if (!isDragging) {
             // check isDragging in case the change is still in progress (touch -> drag case)
-            onValueChangeFinished?.invoke()
+            this.onValueChangeFinished?.invoke()
         }
     }
 

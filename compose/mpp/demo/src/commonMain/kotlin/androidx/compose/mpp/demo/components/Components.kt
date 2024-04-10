@@ -16,7 +16,6 @@
 
 package androidx.compose.mpp.demo.components
 
-import androidx.compose.mpp.demo.LazyLayouts
 import androidx.compose.mpp.demo.Screen
 import androidx.compose.mpp.demo.components.dialog.Dialogs
 import androidx.compose.mpp.demo.components.material.AlertDialogExample
@@ -56,5 +55,7 @@ val Components = Screen.Selection(
     LazyLayouts,
     MaterialComponents,
     Material3Components,
-    Screen.Example("Selection") { SelectionExample() }
+    Screen.Example("NestedScroll") { NestedScrollExample() },
+    Screen.Example("Selection") { SelectionExample() },
+    Screen.Example("Pager") { PagerExample() },
 )

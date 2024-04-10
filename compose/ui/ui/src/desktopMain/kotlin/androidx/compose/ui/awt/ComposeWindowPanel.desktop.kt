@@ -18,6 +18,8 @@ package androidx.compose.ui.awt
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.ComposeFeatureFlags
+import androidx.compose.ui.LayerType
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.scene.ComposeContainer
@@ -55,7 +57,13 @@ internal class ComposeWindowPanel(
         container = this,
         skiaLayerAnalytics = skiaLayerAnalytics,
         window = window,
-        useSwingGraphics = false
+        useSwingGraphics = false,
+        layerType = ComposeFeatureFlags.layerType.let {
+            // LayerType.OnComponent might be used only with rendering to Swing graphics,
+            // but it's always disabled here. Using fallback instead of [check] to support
+            // opening separate windows from [ComposePanel] with such layer type.
+            if (it == LayerType.OnComponent) LayerType.OnSameCanvas else it
+        }
     )
     private val composeContainer
         get() = requireNotNull(_composeContainer) {
@@ -81,39 +89,10 @@ internal class ComposeWindowPanel(
                 }
                 field = value
                 composeContainer.onChangeWindowTransparency(value)
-
-                /*
-                 * Windows makes clicks on transparent pixels fall through, but it doesn't work
-                 * with GPU accelerated rendering since this check requires having access to pixels from CPU.
-                 *
-                 * JVM doesn't allow override this behaviour with low-level windows methods, so hack this in this way.
-                 * Based on tests, it doesn't affect resulting pixel color.
-                 *
-                 * Note: Do not set isOpaque = false for this container
-                 */
-                if (value && hostOs == OS.Windows) {
-                    background = Color(0, 0, 0, 1)
-                    isOpaque = true
-                } else {
-                    background = null
-                    isOpaque = false
-                }
-
-                window.background = if (value && !skikoTransparentWindowHack) Color(0, 0, 0, 0) else null
+                setTransparent(value)
+                window.background = getTransparentWindowBackground(value, renderApi)
             }
         }
-
-    /**
-     * There is a hack inside skiko OpenGL and Software redrawers for Windows that makes current
-     * window transparent without setting `background` to JDK's window. It's done by getting native
-     * component parent and calling `DwmEnableBlurBehindWindow`.
-     *
-     * FIXME: Make OpenGL work inside transparent window (background == Color(0, 0, 0, 0)) without this hack.
-     *
-     * See `enableTransparentWindow` (skiko/src/awtMain/cpp/windows/window_util.cc)
-     */
-    private val skikoTransparentWindowHack: Boolean
-        get() = hostOs == OS.Windows && renderApi != GraphicsApi.DIRECT3D
 
     init {
         layout = null
@@ -130,11 +109,6 @@ internal class ComposeWindowPanel(
     override fun setBounds(x: Int, y: Int, width: Int, height: Int) {
         super.setBounds(x, y, width, height)
         composeContainer.setBounds(0, 0, width, height)
-    }
-
-    override fun add(component: Component): Component {
-        composeContainer.addToComponentLayer(component)
-        return component
     }
 
     override fun getPreferredSize(): Dimension? = if (isPreferredSizeSet) {

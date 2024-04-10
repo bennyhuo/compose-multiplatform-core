@@ -23,10 +23,12 @@ import javax.accessibility.Accessible
 import javax.accessibility.AccessibleContext
 import org.jetbrains.skiko.ExperimentalSkikoApi
 import org.jetbrains.skiko.SkiaLayerAnalytics
+import org.jetbrains.skiko.SkikoRenderDelegate
 import org.jetbrains.skiko.swing.SkiaSwingLayer
 
 /**
- * Provides a lightweight Swing [contentComponent] used to render content (provided by client.skikoView) on-screen with Skia.
+ * Provides a lightweight Swing [contentComponent] used to render content
+ * (provided by [SkikoRenderDelegate]) on-screen with Skia.
  *
  * [SwingSkiaLayerComponent] provides smooth integration with Swing, so z-ordering, double-buffering etc. from Swing will be taken into account.
  *
@@ -35,6 +37,7 @@ import org.jetbrains.skiko.swing.SkiaSwingLayer
 @OptIn(ExperimentalSkikoApi::class)
 internal class SwingSkiaLayerComponent(
     private val mediator: ComposeSceneMediator,
+    renderDelegate: SkikoRenderDelegate,
     skiaLayerAnalytics: SkiaLayerAnalytics,
 ) : SkiaLayerComponent {
     /**
@@ -42,11 +45,11 @@ internal class SwingSkiaLayerComponent(
      */
     override val contentComponent: SkiaSwingLayer =
         object : SkiaSwingLayer(
-            skikoView = mediator.skikoView,
+            renderDelegate = renderDelegate,
             analytics = skiaLayerAnalytics
         ) {
             override fun paint(g: Graphics) {
-                mediator.onChangeComponentDensity()
+                mediator.onChangeDensity()
                 super.paint(g)
             }
 

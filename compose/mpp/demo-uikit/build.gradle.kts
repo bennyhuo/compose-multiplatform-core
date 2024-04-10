@@ -1,17 +1,18 @@
 import androidx.build.AndroidXComposePlugin
 import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.KotlinNativeBinaryContainer
-import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
-import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinTargetWithBinaries
+import androidx.build.JetbrainsAndroidXPlugin
 
 plugins {
     id("AndroidXPlugin")
     id("AndroidXComposePlugin")
     id("kotlin-multiplatform")
     id("org.jetbrains.gradle.apple.applePlugin") version "222.4550-0.22"
+    id("JetbrainsAndroidXPlugin")
 }
 
 AndroidXComposePlugin.applyAndConfigureKotlinPlugin(project)
+JetbrainsAndroidXPlugin.applyAndConfigure(project)
 
 repositories {
     mavenLocal()

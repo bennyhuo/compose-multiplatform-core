@@ -382,8 +382,11 @@ internal fun <T> OldOrNewScrollbar(
     val adapter = remember(oldOrNewAdapter, containerSize){
         newScrollbarAdapterFactory(oldOrNewAdapter, containerSize)
     }
-    val sliderAdapter = remember(adapter, containerSize, minimalHeight, reverseLayout, isVertical) {
-        SliderAdapter(adapter, containerSize, minimalHeight, reverseLayout, isVertical)
+    val coroutineScope = rememberCoroutineScope()
+    val sliderAdapter = remember(
+        adapter, containerSize, minimalHeight, reverseLayout, isVertical, coroutineScope
+    ) {
+        SliderAdapter(adapter, containerSize, minimalHeight, reverseLayout, isVertical, coroutineScope)
     }
 
     val scrollThickness = style.thickness.roundToPx()
@@ -418,7 +421,7 @@ internal fun <T> OldOrNewScrollbar(
         },
         modifier
             .hoverable(interactionSource = interactionSource)
-            .scrollOnPressTrack(isVertical, sliderAdapter),
+            .scrollOnPressTrack(isVertical, reverseLayout, sliderAdapter),
         measurePolicy
     )
 }
@@ -782,12 +785,13 @@ interface ScrollbarAdapter {
 
 }
 
-private fun thumbPixelRange(sliderAdapter: SliderAdapter): IntRange {
-    val start = sliderAdapter.position.roundToInt()
-    val endExclusive = start + sliderAdapter.thumbSize.roundToInt()
+private val SliderAdapter.thumbPixelRange: IntRange
+    get() {
+        val start = position.roundToInt()
+        val endExclusive = start + thumbSize.roundToInt()
 
-    return start until endExclusive
-}
+        return (start until endExclusive)
+    }
 
 private val IntRange.size get() = last + 1 - first
 
@@ -797,8 +801,7 @@ private fun verticalMeasurePolicy(
     scrollThickness: Int
 ) = MeasurePolicy { measurables, constraints ->
     setContainerSize(constraints.maxHeight)
-    val pixelRange = thumbPixelRange(sliderAdapter)
-
+    val pixelRange = sliderAdapter.thumbPixelRange
     val placeable = measurables.first().measure(
         Constraints.fixed(
             constraints.constrainWidth(scrollThickness),
@@ -816,8 +819,7 @@ private fun horizontalMeasurePolicy(
     scrollThickness: Int
 ) = MeasurePolicy { measurables, constraints ->
     setContainerSize(constraints.maxWidth)
-    val pixelRange = thumbPixelRange(sliderAdapter)
-
+    val pixelRange = sliderAdapter.thumbPixelRange
     val placeable = measurables.first().measure(
         Constraints.fixed(
             pixelRange.size,
@@ -862,11 +864,12 @@ private fun Modifier.scrollbarDrag(
 
 private fun Modifier.scrollOnPressTrack(
     isVertical: Boolean,
+    reverseLayout: Boolean,
     sliderAdapter: SliderAdapter,
 ) = composed {
     val coroutineScope = rememberCoroutineScope()
-    val scroller = remember(sliderAdapter, coroutineScope) {
-        TrackPressScroller(coroutineScope, sliderAdapter)
+    val scroller = remember(sliderAdapter, coroutineScope, reverseLayout) {
+        TrackPressScroller(coroutineScope, sliderAdapter, reverseLayout)
     }
     Modifier.pointerInput(scroller) {
         detectScrollViaTrackGestures(
@@ -881,7 +884,8 @@ private fun Modifier.scrollOnPressTrack(
  */
 private class TrackPressScroller(
     private val coroutineScope: CoroutineScope,
-    private val sliderAdapter: SliderAdapter
+    private val sliderAdapter: SliderAdapter,
+    private val reverseLayout: Boolean,
 ) {
 
     /**
@@ -903,10 +907,10 @@ private class TrackPressScroller(
      * Calculates the direction of scrolling towards the given offset (in pixels).
      */
     private fun directionOfScrollTowards(offset: Float): Int {
-        val pixelRange = thumbPixelRange(sliderAdapter)
+        val pixelRange = sliderAdapter.thumbPixelRange
         return when {
-            offset < pixelRange.first -> -1
-            offset > pixelRange.last -> 1
+            offset < pixelRange.first -> if (reverseLayout) 1 else -1
+            offset > pixelRange.last -> if (reverseLayout) -1 else 1
             else -> 0
         }
     }

@@ -60,13 +60,19 @@ Note that only desktop has API checks at the moment, but in the future it will b
 
 ### Publishing
 Compose Multiplatform core libraries can be published to local Maven with the following steps:
-1. Set `COMPOSE_CUSTOM_VERSION` environment variable
-```bash
-export COMPOSE_CUSTOM_VERSION=0.0.0-custom-version
-```
+1. Use these gradle properties to set the published libraries versions
+
+`-Pjetbrains.publication.version.CORE_BUNDLE`,
+`-Pjetbrains.publication.version.COMPOSE`,
+`-Pjetbrains.publication.version.LIFECYCLE`,
+`-Pjetbrains.publication.version.NAVIGATION`,
+`-Pjetbrains.publication.version.SAVEDSTATE`
+
+Default value for the version is `0.0.0-SNAPSHOT`
+
 2. Publish core libraries
 ```bash
-./gradlew :mpp:publishComposeJbToMavenLocal -Pcompose.platforms=all
+./gradlew :mpp:publishComposeJbToMavenLocal -Pcompose.platforms=all -Pjetbrains.publication.version.COMPOSE=0.1.0-dev1000 -Pjetbrains.publication.version.LIFECYCLE=0.1.0-dev1000
 ```
 `-Pcompose.platforms=all` could be replace with comma-separated list of platforms, such as `js,jvm,androidDebug,androidRelease,macosx64,uikit`.
 

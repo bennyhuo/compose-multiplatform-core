@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 The Android Open Source Project
+ * Copyright 2024 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,109 +17,43 @@
 package androidx.compose.ui.native
 
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asComposeCanvas
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.key.KeyEvent
-import androidx.compose.ui.input.pointer.PointerId
+import androidx.compose.ui.input.pointer.PointerButton
+import androidx.compose.ui.input.pointer.PointerButtons
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
 import androidx.compose.ui.input.pointer.PointerType
-import androidx.compose.ui.input.pointer.toCompose
 import androidx.compose.ui.platform.PlatformContext
-import androidx.compose.ui.scene.MultiLayerComposeScene
 import androidx.compose.ui.scene.ComposeSceneContext
 import androidx.compose.ui.scene.ComposeScenePointer
+import androidx.compose.ui.scene.MultiLayerComposeScene
 import androidx.compose.ui.scene.platformContext
 import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.util.fastAny
 import kotlinx.coroutines.Dispatchers
 import org.jetbrains.skia.Canvas
 import org.jetbrains.skiko.SkiaLayer
-import org.jetbrains.skiko.SkikoInput
-import org.jetbrains.skiko.SkikoKeyboardEvent
-import org.jetbrains.skiko.SkikoPointerDevice
-import org.jetbrains.skiko.SkikoPointerEvent
-import org.jetbrains.skiko.SkikoPointerEventKind
-import org.jetbrains.skiko.SkikoView
-import org.jetbrains.skiko.currentNanoTime
+import org.jetbrains.skiko.SkikoRenderDelegate
 
 internal class ComposeLayer(
     internal val layer: SkiaLayer,
     platformContext: PlatformContext,
-    private val input: SkikoInput,
 ) {
     private var isDisposed = false
 
     // Should be set to an actual value by ComposeWindow implementation
     private var density = Density(1f)
 
-    private inner class ComponentImpl : SkikoView {
-        override val input = this@ComposeLayer.input
-
-        override fun onRender(canvas: Canvas, width: Int, height: Int, nanoTime: Long) {
-            scene.render(canvas.asComposeCanvas(), nanoTime)
-        }
-
-        override fun onKeyboardEvent(event: SkikoKeyboardEvent) {
-            if (isDisposed) return
-            scene.sendKeyEvent(KeyEvent(event))
-        }
-
-        override fun onPointerEvent(event: SkikoPointerEvent) {
-            if (event.pointers.firstOrNull()?.device == SkikoPointerDevice.TOUCH) {
-                if (scene.platformContext.inputModeManager.inputMode != InputMode.Touch) {
-                    scene.platformContext.inputModeManager.requestInputMode(InputMode.Touch)
-                }
-                onPointerEventWithMultitouch(event)
-            } else {
-                // macos and desktop`s web don't work properly when using onPointerEventWithMultitouch
-                onPointerEventNoMultitouch(event)
+    init {
+        layer.renderDelegate = object : SkikoRenderDelegate {
+            override fun onRender(canvas: Canvas, width: Int, height: Int, nanoTime: Long) {
+                scene.render(canvas.asComposeCanvas(), nanoTime)
             }
         }
-
-        @OptIn(ExperimentalComposeUiApi::class)
-        private fun onPointerEventWithMultitouch(event: SkikoPointerEvent) {
-            val scale = density.density
-
-            scene.sendPointerEvent(
-                eventType = event.kind.toCompose(),
-                pointers = event.pointers.map {
-                    ComposeScenePointer(
-                        id = PointerId(it.id),
-                        position = Offset(
-                            x = it.x.toFloat() * scale,
-                            y = it.y.toFloat() * scale
-                        ),
-                        pressed = it.pressed,
-                        type = it.device.toCompose(),
-                        pressure = it.pressure.toFloat(),
-                    )
-                },
-                timeMillis = event.timestamp,
-                nativeEvent = event
-            )
-        }
-
-        private fun onPointerEventNoMultitouch(event: SkikoPointerEvent) {
-            val scale = density.density
-            scene.sendPointerEvent(
-                eventType = event.kind.toCompose(),
-                scrollDelta = event.getScrollDelta(),
-                position = Offset(
-                    x = event.x.toFloat() * scale,
-                    y = event.y.toFloat() * scale
-                ),
-                timeMillis = currentMillis(),
-                type = PointerType.Mouse,
-                nativeEvent = event
-            )
-        }
-    }
-
-    private val view = ComponentImpl()
-
-    init {
-        layer.skikoView = view
     }
 
     private val scene = MultiLayerComposeScene(
@@ -145,7 +79,7 @@ internal class ComposeLayer(
     }
 
     fun setSize(width: Int, height: Int) {
-        scene.boundsInWindow = IntRect(0, 0, width, height)
+        scene.size = IntSize(width, height)
 
         layer.needRedraw()
     }
@@ -170,17 +104,57 @@ internal class ComposeLayer(
         _initContent = null
         // }
     }
+
+    fun onKeyboardEvent(event: KeyEvent): Boolean {
+        if (isDisposed) return false
+        return scene.sendKeyEvent(event)
+    }
+
+    fun onMouseEvent(
+        eventType: PointerEventType,
+        position: Offset,
+        scrollDelta: Offset = Offset.Zero,
+        buttons: PointerButtons? = null,
+        keyboardModifiers: PointerKeyboardModifiers? = null,
+        nativeEvent: Any? = null,
+        button: PointerButton? = null,
+    ) {
+        if (isDisposed) return
+        scene.sendPointerEvent(
+            eventType = eventType,
+            position = position,
+            scrollDelta = scrollDelta,
+            buttons = buttons,
+            keyboardModifiers = keyboardModifiers,
+            nativeEvent = nativeEvent,
+            button = button
+        )
+    }
+
+    fun onTouchEvent(
+        eventType: PointerEventType,
+        pointers: List<ComposeScenePointer>,
+        buttons: PointerButtons = PointerButtons(),
+        keyboardModifiers: PointerKeyboardModifiers = PointerKeyboardModifiers(),
+        scrollDelta: Offset = Offset.Zero,
+        nativeEvent: Any? = null,
+        button: PointerButton? = null,
+    ) {
+        if (isDisposed) return
+        val inputModeManager = scene.platformContext.inputModeManager
+        if (inputModeManager.inputMode != InputMode.Touch) {
+            inputModeManager.requestInputMode(InputMode.Touch)
+        }
+        scene.sendPointerEvent(
+            eventType = eventType,
+            pointers = pointers,
+            buttons = buttons,
+            keyboardModifiers = keyboardModifiers,
+            scrollDelta = scrollDelta,
+            nativeEvent = nativeEvent,
+            button = button
+        )
+    }
 }
-
-private fun currentMillis() = (currentNanoTime() / 1E6).toLong()
-
 
 internal expect val supportsMultitouch: Boolean
-
-internal fun SkikoPointerEvent.getScrollDelta(): Offset {
-    return this.takeIf {
-        it.kind == SkikoPointerEventKind.SCROLL
-    }?.let {
-        Offset(it.deltaX.toFloat(), it.deltaY.toFloat())
-    } ?: Offset.Zero
-}

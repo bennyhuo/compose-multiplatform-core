@@ -15,6 +15,7 @@
  */
 
 import androidx.build.AndroidXComposePlugin
+import androidx.build.JetbrainsAndroidXPlugin
 import androidx.build.LibraryType
 
 plugins {
@@ -22,9 +23,11 @@ plugins {
     id("AndroidXComposePlugin")
     id("com.android.library")
     id("kotlinx-atomicfu")
+    id("JetbrainsAndroidXPlugin")
 }
 
 AndroidXComposePlugin.applyAndConfigureKotlinPlugin(project)
+JetbrainsAndroidXPlugin.applyAndConfigure(project)
 
 dependencies {
 
@@ -180,10 +183,19 @@ if(AndroidXComposePlugin.isMultiplatformEnabled(project)) {
             desktopMain.dependsOn(jbMain)
             jsNativeMain.dependsOn(jbMain)
 
-            linuxArm64Main.dependsOn(nativeMain)
-            linuxArm64Test.dependsOn(nativeTest)
-            linuxX64Main.dependsOn(nativeMain)
-            linuxX64Test.dependsOn(nativeTest)
+            linuxMain {
+                dependsOn(nativeMain)
+            }
+
+            linuxTest {
+                dependsOn(nativeTest)
+            }
+
+            linuxArm64Main.dependsOn(linuxMain)
+            linuxArm64Test.dependsOn(linuxTest)
+            linuxX64Main.dependsOn(linuxMain)
+            linuxX64Test.dependsOn(linuxTest)
+
             mingwX64Main.dependsOn(nativeMain)
             mingwX64Test.dependsOn(nativeTest)
 
