@@ -152,14 +152,14 @@ internal class ComposeContainer(
     override val lifecycle = LifecycleRegistry(this)
 
     init {
+        lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
+
         setWindow(window)
         this.windowContainer = windowContainer
 
         if (layerType == LayerType.OnComponent && !useSwingGraphics) {
             error("Unsupported LayerType.OnComponent might be used only with rendering to Swing graphics")
         }
-
-        lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
     }
 
     fun dispose() {
@@ -203,9 +203,11 @@ internal class ComposeContainer(
         windowContext.setWindowFocused(isFocused)
         mediator.onChangeWindowFocus()
         layers.fastForEach(DesktopComposeSceneLayer::onChangeWindowFocus)
-        lifecycle.handleLifecycleEvent(
-            event = if (isFocused) Lifecycle.Event.ON_RESUME else Lifecycle.Event.ON_PAUSE
-        )
+        if (isFocused) {
+            lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+        } else if (window?.isVisible == true) {
+            lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
+        }
     }
 
     private fun onChangeWindowPosition() {
