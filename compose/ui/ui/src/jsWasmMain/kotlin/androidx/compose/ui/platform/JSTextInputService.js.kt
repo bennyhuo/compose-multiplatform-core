@@ -16,8 +16,6 @@
 
 package androidx.compose.ui.platform
 
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.text.input.CommitTextCommand
 import androidx.compose.ui.text.input.EditCommand
 import androidx.compose.ui.text.input.ImeAction
@@ -27,16 +25,11 @@ import androidx.compose.ui.text.input.TextFieldValue
 import org.jetbrains.skiko.SkikoInput
 import org.jetbrains.skiko.SkikoInputEvent
 
-internal class JSTextInputService(
-    private val jsInputModeManager: DefaultInputModeManager,
-    private val imeTextInputService: ImeTextInputService
-) : PlatformTextInputService {
+internal class JSTextInputService : PlatformTextInputService {
 
     data class CurrentInput(
         var value: TextFieldValue,
-        var imeOptions: ImeOptions,
         val onEditCommand: ((List<EditCommand>) -> Unit),
-        var onImeActionPerformed: (ImeAction) -> Unit
     )
 
     private var currentInput: CurrentInput? = null
@@ -49,47 +42,26 @@ internal class JSTextInputService(
     ) {
         currentInput = CurrentInput(
             value,
-            imeOptions,
-            onEditCommand,
-            onImeActionPerformed
+            onEditCommand
         )
-
-        if (jsInputModeManager.inputMode == InputMode.Touch) {
-            imeTextInputService.setInput(currentInput)
-            showSoftwareKeyboard()
-        }
+        showSoftwareKeyboard()
     }
 
     override fun stopInput() {
         currentInput = null
-        imeTextInputService.clear()
     }
 
     override fun showSoftwareKeyboard() {
-        if (jsInputModeManager.inputMode == InputMode.Touch) {
-            imeTextInputService.setInput(currentInput)
-            imeTextInputService.showSoftwareKeyboard()
-        }
+        println("TODO showSoftwareKeyboard in JS")
     }
 
     override fun hideSoftwareKeyboard() {
-        if (jsInputModeManager.inputMode == InputMode.Touch) {
-            imeTextInputService.hideSoftwareKeyboard()
-        }
-    }
-
-    override fun notifyFocusedRect(rect: Rect) {
-        if (jsInputModeManager.inputMode == InputMode.Touch) {
-            imeTextInputService.updatePosition(rect)
-        }
+        println("TODO showSoftwareKeyboard in JS")
     }
 
     override fun updateState(oldValue: TextFieldValue?, newValue: TextFieldValue) {
         currentInput?.let { input ->
             input.value = newValue
-            if (jsInputModeManager.inputMode == InputMode.Touch) {
-                imeTextInputService.updateState(newValue)
-            }
         }
     }
 
