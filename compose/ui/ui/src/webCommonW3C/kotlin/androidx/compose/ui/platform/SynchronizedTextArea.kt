@@ -96,6 +96,11 @@ internal class SynchronizedTextArea(
             sendImeValueToCompose(onEditCommand, text, cursorPosition)
         })
 
+        htmlInput.addEventListener("contextmenu", { evt ->
+            evt.preventDefault()
+            evt.stopPropagation()
+        })
+
         // this done by analogy with KeyCommand.NEW_LINE processing in TextFieldKeyInput
         if (imeOptions.singleLine) {
             htmlInput.addEventListener("keydown", { evt ->
