@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 The Android Open Source Project
+ * Copyright 2024 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,20 +16,31 @@
 
 package androidx.compose.ui.platform
 
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.text.input.EditCommand
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.ImeOptions
 import androidx.compose.ui.text.input.PlatformTextInputService
 import androidx.compose.ui.text.input.TextFieldValue
 
-internal class JSTextInputService : PlatformTextInputService {
+internal interface InputAwareInputService {
+    fun resolveInputMode(): InputMode
+    fun getOffset(rect: Rect): Offset
+}
 
-    data class CurrentInput(
-        var value: TextFieldValue,
-        val onEditCommand: ((List<EditCommand>) -> Unit),
-    )
+internal abstract class WebTextInputService : PlatformTextInputService, InputAwareInputService {
+    private val webImeInputService = WebImeInputService(this)
+    private val webKeyboardInputService = WebKeyboardInputService()
 
-    private var currentInput: CurrentInput? = null
+    private fun delegatedService(): PlatformTextInputService {
+        return when (resolveInputMode()) {
+            InputMode.Touch -> webImeInputService
+            InputMode.Keyboard -> webKeyboardInputService
+            else -> webKeyboardInputService
+        }
+    }
 
     override fun startInput(
         value: TextFieldValue,
@@ -37,28 +48,26 @@ internal class JSTextInputService : PlatformTextInputService {
         onEditCommand: (List<EditCommand>) -> Unit,
         onImeActionPerformed: (ImeAction) -> Unit
     ) {
-        currentInput = CurrentInput(
-            value,
-            onEditCommand
-        )
-        showSoftwareKeyboard()
+        delegatedService().startInput(value, imeOptions, onEditCommand, onImeActionPerformed)
     }
 
     override fun stopInput() {
-        currentInput = null
+        delegatedService().stopInput()
     }
 
     override fun showSoftwareKeyboard() {
-        println("TODO showSoftwareKeyboard in JS")
+        delegatedService().showSoftwareKeyboard()
     }
 
     override fun hideSoftwareKeyboard() {
-        println("TODO showSoftwareKeyboard in JS")
+        delegatedService().hideSoftwareKeyboard()
     }
 
     override fun updateState(oldValue: TextFieldValue?, newValue: TextFieldValue) {
-        currentInput?.let { input ->
-            input.value = newValue
-        }
+        delegatedService().updateState(oldValue, newValue)
+    }
+
+    override fun notifyFocusedRect(rect: Rect) {
+        delegatedService().notifyFocusedRect(rect)
     }
 }
