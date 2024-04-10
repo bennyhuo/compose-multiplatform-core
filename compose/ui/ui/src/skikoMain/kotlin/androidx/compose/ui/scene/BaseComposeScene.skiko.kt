@@ -98,8 +98,7 @@ internal abstract class BaseComposeScene(
     private var hasPendingDraws = true
     protected fun invalidateIfNeeded() {
         hasPendingDraws = frameClock.hasAwaiters ||
-            snapshotInvalidationTracker.hasInvalidations ||
-            inputHandler.hasInvalidations
+            snapshotInvalidationTracker.hasInvalidations
         if (hasPendingDraws && !isInvalidationDisabled && !isClosed && composition != null) {
             invalidate()
         }
@@ -163,7 +162,7 @@ internal abstract class BaseComposeScene(
             doLayout()  // Layout
 
             // Schedule synthetic events to be sent after `render` completes
-            if (inputHandler.hasInvalidations) {
+            if (inputHandler.needUpdatePointerPosition) {
                 recomposer.scheduleAsEffect(updatePointerPosition)
             }
 
