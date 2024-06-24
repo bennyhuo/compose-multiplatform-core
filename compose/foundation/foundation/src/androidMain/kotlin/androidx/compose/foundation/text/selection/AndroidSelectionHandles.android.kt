@@ -28,6 +28,7 @@ import androidx.compose.foundation.text.selection.SelectionHandleAnchor.Right
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.CacheDrawScope
@@ -217,6 +218,7 @@ internal fun CacheDrawScope.createHandleImage(radius: Float): ImageBitmap {
     return imageBitmap
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 internal fun HandlePopup(
     positionProvider: OffsetProvider,

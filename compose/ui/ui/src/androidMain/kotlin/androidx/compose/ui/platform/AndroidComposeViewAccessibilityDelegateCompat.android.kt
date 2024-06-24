@@ -2216,7 +2216,7 @@ internal class AndroidComposeViewAccessibilityDelegateCompat(val view: AndroidCo
                 }
                 if (isEnabledForAccessibility) {
                     for (i in subtreeChangedLayoutNodes.indices) {
-                        val layoutNode = subtreeChangedLayoutNodes.valueAt(i)
+                        val layoutNode = subtreeChangedLayoutNodes.valueAt(i)!!
                         sendSubtreeChangeAccessibilityEvents(
                             layoutNode,
                             subtreeChangedSemanticsNodesIds

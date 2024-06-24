@@ -14,16 +14,8 @@
  * limitations under the License.
  */
 
-package androidx.compose.foundation.gestures
+package androidx.compose.ui
 
-import androidx.compose.animation.rememberSplineBasedDecay
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-
-@Composable
-internal actual fun rememberPlatformDefaultFlingBehavior(): FlingBehavior {
-    val flingSpec = rememberSplineBasedDecay<Float>()
-    return remember(flingSpec) {
-        DefaultFlingBehavior(flingSpec)
-    }
+fun CLog(vararg message: Any?) {
+    println("/// ${message.joinToString()}")
 }

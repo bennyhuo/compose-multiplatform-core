@@ -24,8 +24,8 @@ import org.gradle.api.file.FileCollection
 object SupportConfig {
     const val DEFAULT_MIN_SDK_VERSION = 19
     const val INSTRUMENTATION_RUNNER = "androidx.test.runner.AndroidJUnitRunner"
-    private const val INTERNAL_BUILD_TOOLS_VERSION = "33.0.2"
-    private const val PUBLIC_BUILD_TOOLS_VERSION = "33.0.2"
+    private const val INTERNAL_BUILD_TOOLS_VERSION = "34.0.0"
+    private const val PUBLIC_BUILD_TOOLS_VERSION = "34.0.0"
     const val NDK_VERSION = "25.2.9519653"
 
     /**
@@ -34,7 +34,7 @@ object SupportConfig {
      * Either an integer value or a pre-release platform code, prefixed with "android-" (ex.
      * "android-28" or "android-Q") as you would see within the SDK's platforms directory.
      */
-    const val COMPILE_SDK_VERSION = "android-33"
+    const val COMPILE_SDK_VERSION = "android-34"
 
     /**
      * The Android SDK version to use for targetSdkVersion meta-data.

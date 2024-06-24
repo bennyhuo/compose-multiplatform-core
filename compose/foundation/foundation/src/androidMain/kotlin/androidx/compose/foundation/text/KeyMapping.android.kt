@@ -72,4 +72,5 @@ internal actual object MappedKeys {
     actual val Cut: Key = Key(AndroidKeyEvent.KEYCODE_CUT)
     actual val Copy: Key = Key(AndroidKeyEvent.KEYCODE_COPY)
     actual val Tab: Key = Key(AndroidKeyEvent.KEYCODE_TAB)
+    actual val NumPadEnter: Key = Key(AndroidKeyEvent.KEYCODE_ENTER)
 }

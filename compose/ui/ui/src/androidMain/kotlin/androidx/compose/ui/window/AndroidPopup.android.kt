@@ -110,16 +110,16 @@ import org.jetbrains.annotations.TestOnly
  * the platform default, which is smaller than the screen width.
  */
 @Immutable
-actual class PopupProperties @ExperimentalComposeUiApi constructor(
+actual class PopupProperties constructor(
     actual val focusable: Boolean = false,
     actual val dismissOnBackPress: Boolean = true,
     actual val dismissOnClickOutside: Boolean = true,
     val securePolicy: SecureFlagPolicy = SecureFlagPolicy.Inherit,
     val excludeFromSystemGesture: Boolean = true,
-    val clippingEnabled: Boolean = true,
+    actual val clippingEnabled: Boolean = true,
     val usePlatformDefaultWidth: Boolean = false
 ) {
-    actual constructor(
+    constructor(
         focusable: Boolean,
         dismissOnBackPress: Boolean,
         dismissOnClickOutside: Boolean
@@ -133,19 +133,17 @@ actual class PopupProperties @ExperimentalComposeUiApi constructor(
     )
 
     @OptIn(ExperimentalComposeUiApi::class)
-    constructor(
-        focusable: Boolean = false,
-        dismissOnBackPress: Boolean = true,
-        dismissOnClickOutside: Boolean = true,
-        securePolicy: SecureFlagPolicy = SecureFlagPolicy.Inherit,
-        excludeFromSystemGesture: Boolean = true,
-        clippingEnabled: Boolean = true,
+   actual constructor(
+        focusable: Boolean,
+        dismissOnBackPress: Boolean,
+        dismissOnClickOutside: Boolean,
+        @Suppress("FORBIDDEN_VARARG_PARAMETER_TYPE")
+        vararg unsupported: Nothing,
+        clippingEnabled: Boolean,
     ) : this (
         focusable = focusable,
         dismissOnBackPress = dismissOnBackPress,
         dismissOnClickOutside = dismissOnClickOutside,
-        securePolicy = securePolicy,
-        excludeFromSystemGesture = excludeFromSystemGesture,
         clippingEnabled = clippingEnabled,
         usePlatformDefaultWidth = false
     )

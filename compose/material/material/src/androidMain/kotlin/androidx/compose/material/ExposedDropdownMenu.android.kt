@@ -172,6 +172,7 @@ private class OnGlobalLayoutListener(
     }
 }
 
+@Composable
 internal actual fun ExposedDropdownMenuBoxScope.ExposedDropdownMenuDefaultImpl(
     expanded: Boolean,
     onDismissRequest: () -> Unit,

@@ -29,6 +29,6 @@ import androidx.compose.ui.input.key.type
  */
 internal actual val KeyEvent.isToggle: Boolean
     get() = type == KeyUp && when (key.nativeKeyCode) {
-        KEYCODE_SPACE,  // TODO recheck when we upstream
+        KEYCODE_SPACE -> true  // TODO recheck when we upstream
         else -> false
 }

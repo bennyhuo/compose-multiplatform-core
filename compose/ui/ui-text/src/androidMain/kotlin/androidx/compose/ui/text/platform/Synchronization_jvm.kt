@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 The Android Open Source Project
+ * Copyright 2021 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,12 @@
  * limitations under the License.
  */
 
-package androidx.compose.foundation.gestures
+package androidx.compose.ui.text.platform
 
-import androidx.compose.animation.rememberSplineBasedDecay
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+internal class SynchronizedObject
 
-@Composable
-internal actual fun rememberPlatformDefaultFlingBehavior(): FlingBehavior {
-    val flingSpec = rememberSplineBasedDecay<Float>()
-    return remember(flingSpec) {
-        DefaultFlingBehavior(flingSpec)
-    }
+internal fun createSynchronizedObject() = SynchronizedObject()
+
+internal inline fun <R> synchronized(lock: SynchronizedObject, block: () -> R): R {
+    return kotlin.synchronized(lock, block)
 }

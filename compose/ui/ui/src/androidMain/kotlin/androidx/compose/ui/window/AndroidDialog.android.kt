@@ -89,18 +89,28 @@ actual class DialogProperties constructor(
     actual val dismissOnBackPress: Boolean = true,
     actual val dismissOnClickOutside: Boolean = true,
     val securePolicy: SecureFlagPolicy = SecureFlagPolicy.Inherit,
-    val usePlatformDefaultWidth: Boolean = true,
+    actual val usePlatformDefaultWidth: Boolean = true,
     val decorFitsSystemWindows: Boolean = true
 ) {
+
     actual constructor(
         dismissOnBackPress: Boolean,
-        dismissOnClickOutside: Boolean
-    ) : this(
+        dismissOnClickOutside: Boolean,
+
+        /*
+         * Temporary hack to skip unsupported arguments from Android source set.
+         * Should be removed after upstreaming changes from JetBrains' fork.
+         *
+         * After skip this unsupported argument, you must name all subsequent arguments.
+         */
+        @Suppress("FORBIDDEN_VARARG_PARAMETER_TYPE")
+        vararg unsupported: Nothing,
+
+        usePlatformDefaultWidth: Boolean,
+    ): this(
         dismissOnBackPress = dismissOnBackPress,
         dismissOnClickOutside = dismissOnClickOutside,
-        securePolicy = SecureFlagPolicy.Inherit,
-        usePlatformDefaultWidth = true,
-        decorFitsSystemWindows = true
+        usePlatformDefaultWidth = usePlatformDefaultWidth
     )
 
     constructor(
@@ -160,7 +170,7 @@ actual class DialogProperties constructor(
 @Composable
 actual fun Dialog(
     onDismissRequest: () -> Unit,
-    properties: DialogProperties = DialogProperties(),
+    properties: DialogProperties,
     content: @Composable () -> Unit
 ) {
     val view = LocalView.current

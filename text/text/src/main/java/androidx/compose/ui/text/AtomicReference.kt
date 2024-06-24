@@ -14,16 +14,9 @@
  * limitations under the License.
  */
 
-package androidx.compose.foundation.gestures
+package androidx.compose.ui.text
 
-import androidx.compose.animation.rememberSplineBasedDecay
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import java.util.concurrent.atomic.AtomicReference
 
-@Composable
-internal actual fun rememberPlatformDefaultFlingBehavior(): FlingBehavior {
-    val flingSpec = rememberSplineBasedDecay<Float>()
-    return remember(flingSpec) {
-        DefaultFlingBehavior(flingSpec)
-    }
-}
+@Suppress("ACTUAL_WITHOUT_EXPECT") // https://youtrack.jetbrains.com/issue/KT-37316
+internal actual typealias AtomicReference<V> = AtomicReference<V>
