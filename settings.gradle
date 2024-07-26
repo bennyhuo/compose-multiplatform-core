@@ -38,10 +38,10 @@ skikoSetup.defineSkikoInVersionCatalog(settings)
 
 // Abort immediately if we're running in Studio, but not a managed instance of Studio.
 if (startParameter.projectProperties.containsKey('android.injected.invoked.from.ide')) {
-    def expectedAgpVersion = System.getenv().get("EXPECTED_AGP_VERSION")
-    if (expectedAgpVersion == null) {
-        throw new Exception("Android Studio must be run from studiow or gradlew studio.")
-    }
+//    def expectedAgpVersion = System.getenv().get("EXPECTED_AGP_VERSION")
+//    if (expectedAgpVersion == null) {
+//        throw new Exception("Android Studio must be run from studiow or gradlew studio.")
+//    }
 }
 
 // Makes strong assumptions about the project structure.
@@ -931,8 +931,8 @@ includeProject(":slidingpanelayout:slidingpanelayout-testapp", [BuildType.MAIN])
 includeProject(":sqlite:integration-tests:driver-conformance-test", [BuildType.MAIN, BuildType.KMP, BuildType.INFRAROGUE])
 includeProject(":sqlite:integration-tests:inspection-room-testapp", [BuildType.MAIN])
 includeProject(":sqlite:integration-tests:inspection-sqldelight-testapp", [BuildType.MAIN])
-includeProject(":sqlite:sqlite", [BuildType.MAIN, BuildType.COMPOSE, BuildType.KMP, BuildType.INFRAROGUE])
-includeProject(":sqlite:sqlite-framework", [BuildType.MAIN, BuildType.COMPOSE, BuildType.KMP, BuildType.INFRAROGUE])
+includeProject(":sqlite:sqlite", [BuildType.MAIN, BuildType.KMP, BuildType.INFRAROGUE])
+includeProject(":sqlite:sqlite-framework", [BuildType.MAIN, BuildType.KMP, BuildType.INFRAROGUE])
 includeProject(":sqlite:sqlite-bundled", [BuildType.MAIN, BuildType.KMP, BuildType.INFRAROGUE])
 includeProject(":sqlite:sqlite-inspection", [BuildType.MAIN])
 includeProject(":sqlite:sqlite-ktx", [BuildType.MAIN])

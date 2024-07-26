@@ -50,5 +50,5 @@ fun Project.getProjectSubset(): String? {
     if (envProp.isPresent) {
         return envProp.get().uppercase()
     }
-    return null
+    return "COMPOSE"
 }

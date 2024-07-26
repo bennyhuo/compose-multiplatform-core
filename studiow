@@ -180,8 +180,8 @@ fi
 # remove studio-specific caches
 if [ "$cleanSettings" == "true" ]; then
   # make backups of files that users might have customized
-  remove ~/.AndroidStudioAndroidX
-  remove ~/.AndroidStudioAndroidXPlayground
+  remove ~/.AndroidStudioAndroidXAOSP
+  remove ~/.AndroidStudioAndroidXAOSPPlayground
   remove ~/.android
 fi
 

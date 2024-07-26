@@ -50,7 +50,7 @@ fun Project.getSdkDependency(): FileTree =
 fun Project.getSdkPath(): File {
     if (
         ProjectLayoutType.from(project) == ProjectLayoutType.PLAYGROUND ||
-            System.getenv("COMPOSE_DESKTOP_GITHUB_BUILD") != null
+            System.getProperty("COMPOSE_DESKTOP_GITHUB_BUILD") != null
     ) {
         // This is not full checkout, use local settings instead.
         // https://developer.android.com/studio/command-line/variables
