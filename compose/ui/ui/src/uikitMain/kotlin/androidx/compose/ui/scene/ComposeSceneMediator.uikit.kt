@@ -512,7 +512,7 @@ internal class ComposeSceneMediator(
     fun dispose() {
         uiKitTextInputService.stopInput()
         applicationForegroundStateListener.dispose()
-        focusStack?.popUntilNext(renderingView)
+        focusStack?.popUntilNext(interactionView)
         keyboardManager.dispose()
         renderingView.dispose()
         interactionView.dispose()
