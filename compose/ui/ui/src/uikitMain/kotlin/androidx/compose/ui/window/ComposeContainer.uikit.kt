@@ -384,7 +384,7 @@ internal class ComposeContainer(
         lifecycleOwner.dispose()
         mediator?.dispose()
         mediator = null
-        layers.fastForEach {
+        layers.fastForEachReversed {
             it.close()
         }
     }
